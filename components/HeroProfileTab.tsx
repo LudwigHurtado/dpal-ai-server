@@ -92,7 +92,7 @@ const HeroProfileTab: React.FC<HeroProfileTabProps> = ({
                                 {/* Tactical HUD Ring */}
                                 <div className="absolute -inset-4 border-2 border-cyan-500/20 rounded-[4rem] animate-pulse pointer-events-none"></div>
                                 
-                                {/* Edit Toggle Button Over Picture - REPLACED bg-white with bg-cyan-600 */}
+                                {/* Edit Toggle Button Over Picture */}
                                 <button 
                                     onClick={() => {
                                         setEditName(hero.name);
@@ -202,6 +202,14 @@ const HeroProfileTab: React.FC<HeroProfileTabProps> = ({
                                 </div>
                                 <span className="text-[9px] font-black text-white uppercase truncate ml-2">{hero.base.name}</span>
                             </div>
+
+                            <button 
+                                onClick={() => onNavigate('tutorial')}
+                                className="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-400 font-black py-4 rounded-2xl uppercase tracking-widest text-[9px] transition-all active:scale-95 flex items-center justify-center space-x-3"
+                            >
+                                <RefreshCw className="w-3.5 h-3.5" />
+                                <span>REPLAY_INDUCTION_PROTOCOL</span>
+                            </button>
                         </div>
                     )}
                 </div>
@@ -243,6 +251,7 @@ const HeroProfileTab: React.FC<HeroProfileTabProps> = ({
                         personas={hero.personas}
                         equippedPersonaId={hero.equippedPersonaId}
                         onAddHeroPersona={onAddHeroPersona}
+                        /* Corrected comment placement and ensured standard JS comments inside tag */
                         onDeletePersona={onDeleteHeroPersona}
                         onEquipPersona={onEquipHeroPersona}
                     />

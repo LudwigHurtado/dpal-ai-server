@@ -57,7 +57,6 @@ export enum SkillLevel {
 
 export type ActionOutcome = 'CLEAN_SUCCESS' | 'PARTIAL_SUCCESS' | 'RISKY_SUCCESS' | 'PARTIAL_CONFIRMATION' | 'INCOMPLETE';
 
-// Tutorial & Extended Prompt Types
 export type FieldPromptType = "confirmation" | "evidence" | "observation" | "safety";
 export type ResponseType = "checkbox" | "photo" | "video" | "text" | "multi-select";
 
@@ -83,16 +82,16 @@ export interface FieldPrompt {
 
 export interface MissionAction {
     id: string;
-    name?: string; // Legacy/Optional
-    title?: string; // New for Tutorial
-    task?: string; // Legacy/Optional
-    objective?: string; // New for Tutorial
+    name?: string; 
+    title?: string; 
+    task?: string; 
+    objective?: string; 
     whyItMatters?: string;
     icon?: string;
     priority?: 'High' | 'Medium' | 'Low';
     isComplete?: boolean;
-    prompts?: FieldPrompt[]; // Legacy
-    requiredPrompts?: FieldPrompt[]; // New for Tutorial
+    prompts?: FieldPrompt[]; 
+    requiredPrompts?: FieldPrompt[]; 
     outcome?: ActionOutcome;
     completedAt?: number;
     userResponses?: Record<string, any>;
@@ -204,6 +203,7 @@ export interface ChatMessage {
     ledgerProof: string; 
     rank?: number;
     avatarUrl?: string;
+    authorId?: string; // Link message to a specific hero node
 }
 
 export interface Report {
@@ -220,6 +220,7 @@ export interface Report {
   hash: string;
   blockchainRef: string;
   isAuthor?: boolean;
+  authorId?: string; // Database reference to creator
   status: ReportStatus;
   trustScore: number; 
   severity: SeverityLevel;

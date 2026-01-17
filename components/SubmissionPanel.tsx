@@ -354,7 +354,6 @@ const SubmissionPanel: React.FC<SubmissionPanelProps> = ({ addReport, preselecte
 
   return (
     <div className="font-mono w-full flex flex-col lg:flex-row gap-8 sm:gap-12 pb-24 md:pb-32">
-      {/* TIMELINE SIDEBAR / HEADER */}
       <aside className="w-full lg:w-72 flex-shrink-0">
           <div className="bg-zinc-900 border border-zinc-800 p-4 sm:p-8 rounded-[1.5rem] sm:rounded-[3rem] lg:sticky lg:top-32 space-y-4 sm:space-y-10 shadow-2xl">
               <div className="flex lg:flex-col justify-between items-center lg:items-start lg:space-y-2 mb-2 lg:mb-8">
@@ -386,7 +385,6 @@ const SubmissionPanel: React.FC<SubmissionPanelProps> = ({ addReport, preselecte
                   })}
               </div>
 
-              {/* Mobile Step Indicator */}
               <div className="lg:hidden flex items-center justify-between text-[10px] font-black uppercase text-zinc-500 tracking-widest px-1">
                   <span>Block {activeStepIndex + 1} of {STEPS.length}</span>
                   <span className="text-amber-500">{STEPS[activeStepIndex].label}</span>
@@ -394,7 +392,6 @@ const SubmissionPanel: React.FC<SubmissionPanelProps> = ({ addReport, preselecte
           </div>
       </aside>
 
-      {/* CONTENT AREA */}
       <div className="flex-grow">
           <form onSubmit={handleSubmit} className="bg-zinc-900/40 border-2 border-zinc-800 rounded-[2rem] sm:rounded-[4rem] p-6 sm:p-16 shadow-4xl relative overflow-hidden">
               <div className="absolute top-0 left-0 w-full h-1 bg-zinc-800">
@@ -405,7 +402,6 @@ const SubmissionPanel: React.FC<SubmissionPanelProps> = ({ addReport, preselecte
                   {renderStepContent()}
               </div>
 
-              {/* Action Buttons - Repositioned inline for all views */}
               <div className="flex mt-12 pt-10 border-t border-zinc-800/50 justify-between gap-4">
                     <button 
                       type="button" 
@@ -419,7 +415,7 @@ const SubmissionPanel: React.FC<SubmissionPanelProps> = ({ addReport, preselecte
                       <button 
                         type="button" 
                         onClick={handleNext} 
-                        className="flex-1 sm:flex-none px-10 py-4 bg-white sm:bg-zinc-900 border border-zinc-300 sm:border-zinc-700 text-black sm:text-amber-400 hover:bg-zinc-800 hover:text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 shadow-xl sm:shadow-none"
+                        className="flex-1 sm:flex-none px-10 py-4 bg-white text-black hover:bg-emerald-400 hover:text-black border border-zinc-300 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 shadow-xl"
                       >
                         Next_Phase
                       </button>

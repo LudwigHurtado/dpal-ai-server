@@ -31,57 +31,15 @@ import SustainmentCenter from './components/SustainmentCenter';
 import SubscriptionView from './components/SubscriptionView';
 import AiSetupView from './components/AiSetupView';
 import TutorialMissionView from './components/TutorialMissionView';
+import TestAccessGate from './components/TestAccessGate';
 import { Category, SubscriptionTier, type Report, type Mission, type FeedAnalysis, type Hero, type Rank, SkillLevel, type EducationRole, NftRarity, IapPack, StoreItem, NftTheme, type ChatMessage, IntelItem, type HeroPersona, type TacticalDossier, type TeamMessage, type HealthRecord, Archetype, type SkillType, type AiDirective, SimulationMode, type MissionCompletionSummary, MissionApproach, MissionGoal } from './types';
 import { MOCK_REPORTS, INITIAL_HERO_PROFILE, RANKS, IAP_PACKS, STORE_ITEMS, STARTER_MISSION } from './constants';
 import { generateNftImage, generateHeroPersonaImage, generateHeroPersonaDetails, generateNftDetails, generateHeroBackstory, generateMissionFromIntel, isAiEnabled, extractVisualDescriptors } from './services/geminiService';
+import { apiService } from './services/apiService';
 import { useTranslations } from './i18n';
 
 export type View = 'mainMenu' | 'categorySelection' | 'hub' | 'heroHub' | 'educationRoleSelection' | 'reportSubmission' | 'missionComplete' | 'reputationAndCurrency' | 'store' | 'reportComplete' | 'liveIntelligence' | 'missionDetail' | 'appLiveIntelligence' | 'generateMission' | 'trainingHolodeck' | 'tacticalVault' | 'transparencyDatabase' | 'aiRegulationHub' | 'incidentRoom' | 'threatMap' | 'teamOps' | 'medicalOutpost' | 'academy' | 'aiWorkDirectives' | 'outreachEscalation' | 'ecosystem' | 'sustainmentCenter' | 'subscription' | 'aiSetup' | 'tutorial';
 export type TextScale = 'standard' | 'large' | 'ultra' | 'magnified';
-
-const getInitialReports = (): Report[] => {
-  const saved = localStorage.getItem('dpal-reports');
-  if (saved) {
-    try { return JSON.parse(saved).map((r: any) => ({ ...r, timestamp: new Date(r.timestamp) })); } 
-    catch (e) { return MOCK_REPORTS; }
-  }
-  return MOCK_REPORTS;
-};
-
-const getInitialChats = (): Record<string, ChatMessage[]> => {
-  const saved = localStorage.getItem("dpal-chats");
-  if (!saved) return {};
-  try { return JSON.parse(saved); } catch { return {}; }
-};
-
-const getInitialMissions = (): Mission[] => {
-  const saved = localStorage.getItem('dpal-missions');
-  if (saved) {
-    try {
-      const parsed = JSON.parse(saved);
-      return parsed.map((m: any) => ({
-        ...m,
-        reconActions: m.reconActions || [],
-        mainActions: m.mainActions || (m.steps || []).map((s: any, i: number) => ({
-            id: `act-${i}`,
-            name: s.name,
-            task: s.task,
-            icon: s.icon,
-            whyItMatters: "Essential field requirement.",
-            priority: s.priority || 'Medium',
-            isComplete: s.isComplete || false,
-            prompts: s.prompts || [
-                { id: `p-${i}-1`, type: 'confirmation', promptText: 'Standard field verification', required: true, responseType: 'checkbox', storedAs: { entity: 'missionLog', field: 'verified' } }
-            ],
-            impactedSkills: ['Technical', 'Civic']
-        })),
-        phase: m.phase || (m.status === 'completed' ? 'COMPLETED' : 'OPERATION'),
-        currentActionIndex: m.currentActionIndex || 0
-      }));
-    } catch (e) { return []; }
-  }
-  return [];
-};
 
 const getInitialHero = (): Hero => {
   const saved = localStorage.getItem('dpal-hero');
@@ -89,32 +47,62 @@ const getInitialHero = (): Hero => {
   return INITIAL_HERO_PROFILE;
 };
 
-const App: React.FC = () => {
-  const [reports, setReports] = useState<Report[]>(getInitialReports);
-  const [chatsByReportId, setChatsByReportId] = useState<Record<string, ChatMessage[]>>(getInitialChats);
-  const [currentView, setCurrentView] = useState<View>(() => {
-      const firstRunDone = localStorage.getItem("dpal_first_run_complete") === "true";
-      return firstRunDone ? 'mainMenu' : 'tutorial';
+const fileToBase64 = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = error => reject(error);
   });
+};
+
+const App: React.FC = () => {
+  // TEST ACCESS GATE LOGIC
+  const isTestPhase = process.env.DPAL_TEST_PHASE !== 'false';
+  const [testGranted, setTestGranted] = useState(() => localStorage.getItem('dpal_test_access_granted_v1') === 'true');
+
+  const [reports, setReports] = useState<Report[]>([]);
+  const [chatsByReportId, setChatsByReportId] = useState<Record<string, ChatMessage[]>>({});
+  const [currentView, setCurrentView] = useState<View>('mainMenu');
   const [prevView, setPrevView] = useState<View>('mainMenu');
   const [heroHubTab, setHeroHubTab] = useState<'profile' | 'missions' | 'skills' | 'training' | 'briefing' | 'collection' | 'mint' | 'store'>('profile');
   const [hubTab, setHubTab] = useState<'my_reports' | 'community' | 'work_feed'>('my_reports');
   const [filters, setFilters] = useState({ keyword: '', selectedCategories: [] as Category[], location: '', });
+  const [networkStatus, setNetworkStatus] = useState<'OFFLINE' | 'SYNCING' | 'LIVE' | 'MOCK'>('OFFLINE');
 
   const [selectedCategoryForSubmission, setSelectedCategoryForSubmission] = useState<Category | null>(null);
   const [selectedIntelForMission, setSelectedIntelForMission] = useState<IntelItem | null>(null);
   const [initialCategoriesForIntel, setInitialCategoriesForIntel] = useState<Category[]>([]);
   
-  const [missions, setMissions] = useState<Mission[]>(getInitialMissions);
+  const [missions, setMissions] = useState<Mission[]>([]);
   const [hero, setHero] = useState<Hero>(getInitialHero);
   const [heroLocation, setHeroLocation] = useState<string>('');
   const [completedReport, setCompletedReport] = useState<Report | null>(null);
   const [completedMissionSummary, setCompletedMissionSummary] = useState<MissionCompletionSummary | null>(null);
-  const [itemForPayment, setItemForPayment] = useState<IapPack | StoreItem | null>(null);
   const [selectedMissionForDetail, setSelectedMissionForDetail] = useState<Mission | null>(null);
   const [selectedReportForIncidentRoom, setSelectedReportForIncidentRoom] = useState<Report | null>(null);
   const [globalTextScale, setGlobalTextScale] = useState<TextScale>('standard');
   const [isOfflineMode, setIsOfflineMode] = useState(() => localStorage.getItem('dpal-offline-mode') === 'true');
+
+  // LOAD LIVE LEDGER ON STARTUP
+  const syncLedger = useCallback(async () => {
+    setNetworkStatus('SYNCING');
+    try {
+      const liveReports = await apiService.getReports();
+      setReports(liveReports.length > 0 ? liveReports : MOCK_REPORTS);
+      setNetworkStatus(apiService.isMock() ? 'MOCK' : 'LIVE');
+    } catch (e) {
+      console.error("Live sync failure", e);
+      setNetworkStatus('OFFLINE');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!testGranted && isTestPhase) return;
+    syncLedger();
+    const interval = setInterval(syncLedger, 60000);
+    return () => clearInterval(interval);
+  }, [syncLedger, testGranted, isTestPhase]);
 
   useEffect(() => { localStorage.setItem('dpal-offline-mode', String(isOfflineMode)); }, [isOfflineMode]);
 
@@ -125,26 +113,12 @@ const App: React.FC = () => {
 
   useEffect(() => {
     localStorage.setItem('dpal-hero', JSON.stringify(hero));
-    localStorage.setItem('dpal-reports', JSON.stringify(reports));
-    localStorage.setItem('dpal-missions', JSON.stringify(missions));
-    localStorage.setItem('dpal-chats', JSON.stringify(chatsByReportId));
-  }, [hero, reports, missions, chatsByReportId]);
+  }, [hero]);
 
   const goBack = useCallback(() => {
       if (currentView === 'mainMenu' || currentView === 'tutorial') return;
       setCurrentView(prevView || 'mainMenu');
   }, [currentView, prevView]);
-
-  useEffect(() => {
-      const handleGlobalContextMenu = (e: MouseEvent) => {
-          if (currentView !== 'mainMenu' && currentView !== 'tutorial') {
-              e.preventDefault();
-              goBack();
-          }
-      };
-      window.addEventListener('contextmenu', handleGlobalContextMenu);
-      return () => window.removeEventListener('contextmenu', handleGlobalContextMenu);
-  }, [currentView, goBack]);
 
   const heroWithRank = useMemo((): Hero => {
     let currentRank: Rank = RANKS[0];
@@ -184,113 +158,142 @@ const App: React.FC = () => {
     }
   };
 
-  const handleCompleteMissionStep = (m: Mission) => {
-    const actions = m.phase === 'RECON' ? m.reconActions : m.mainActions;
-    const nextIdx = m.currentActionIndex + 1;
-
-    if (nextIdx >= actions.length) {
-        if (m.phase === 'RECON') {
-            const updated = { ...m, phase: 'OPERATION' as const, currentActionIndex: 0 };
-            setMissions(prev => prev.map(mi => mi.id === m.id ? updated : mi));
-            setSelectedMissionForDetail(updated);
-        } else {
-            setMissions(prev => prev.map(mi => mi.id === m.id ? { ...mi, phase: 'COMPLETED', status: 'completed' } : mi));
-            setHero(prev => ({ ...prev, heroCredits: prev.heroCredits + m.finalReward.hc, xp: prev.xp + 500 }));
-            setCompletedMissionSummary({ title: m.title, rewardHeroCredits: m.finalReward.hc, rewardNft: m.finalReward.nft });
-            setCurrentView('missionComplete');
-        }
-    } else {
-        const updated = { ...m, currentActionIndex: nextIdx };
-        setMissions(prev => prev.map(mi => mi.id === m.id ? updated : mi));
-        setSelectedMissionForDetail(updated);
-    }
-  };
-
-  const handleAddHeroPersona = async (desc: string, arch: Archetype, sourceImage?: string, prop: string = 'tablet', stance: string = 'calm', customDescriptors?: string) => {
-    // Stage 1: Description Extraction (or use provided edited tags)
-    let visualDescriptors = customDescriptors || "standard operative with tactical gear";
-    if (sourceImage && !customDescriptors) {
-        visualDescriptors = await extractVisualDescriptors(sourceImage);
-    }
-    
-    // Stage 2: Hero Details and Uniform Portrait Generation
-    const details = await generateHeroPersonaDetails(desc, arch);
-    const imageUrl = await generateHeroPersonaImage(visualDescriptors, arch, prop, stance);
-    
-    const newPersona: HeroPersona = { 
-        id: `persona-${Date.now()}`, 
-        name: details.name, 
-        backstory: details.backstory, 
-        combatStyle: details.combatStyle, 
-        imageUrl, 
-        prompt: desc, 
-        archetype: arch 
-    };
-    
-    setHero(prev => ({ 
-        ...prev, 
-        personas: [...prev.personas, newPersona], 
-        equippedPersonaId: prev.equippedPersonaId || newPersona.id 
-    }));
-  };
-
   const handleAddReport = async (rep: any) => {
-    const reportId = `rep-${Date.now()}`;
-    const finalReport: Report = { 
-        ...rep, 
-        id: reportId, 
-        timestamp: new Date(), 
-        hash: `0x${Math.random().toString(16).slice(2)}`, 
-        blockchainRef: `txn_${Math.random().toString(36).slice(2)}`, 
-        isAuthor: true, 
-        status: 'Submitted' 
-    };
-    setReports(prev => [finalReport, ...prev]);
-    setCompletedReport(finalReport);
-    setCurrentView('reportComplete');
+    setNetworkStatus('SYNCING');
+    try {
+        // FIX: Handle File objects for mock serialization
+        const processedImageUrls = [...(rep.imageUrls || [])];
+        if (apiService.isMock() && rep.attachments) {
+            const fileAttachments = rep.attachments.filter((a: any) => a instanceof File);
+            const base64Proms = fileAttachments.map((f: File) => fileToBase64(f));
+            const base64Results = await Promise.all(base64Proms);
+            processedImageUrls.push(...base64Results);
+        }
+
+        const finalReport = await apiService.createReport({
+            ...rep,
+            imageUrls: processedImageUrls,
+            authorId: hero.operativeId,
+            isAuthor: true,
+            attachments: undefined // Do not store raw File objects in ledger
+        });
+
+        setReports(prev => [finalReport, ...prev]);
+        setCompletedReport(finalReport);
+        setCurrentView('reportComplete');
+        setNetworkStatus(apiService.isMock() ? 'MOCK' : 'LIVE');
+    } catch (e) {
+        alert("Transmission to ledger failed. Local buffer only.");
+        setNetworkStatus('OFFLINE');
+    }
   };
 
-  const handleTutorialComplete = (reportData: Partial<Report>, isPractice: boolean) => {
-      const reportId = `rep-tut-${Date.now()}`;
-      const finalReport: Report = {
-          ...reportData as Report,
-          id: reportId,
-          timestamp: new Date(),
-          hash: `0x${Math.random().toString(16).slice(2)}`,
-          blockchainRef: `txn_tut_${Math.random().toString(36).slice(2)}`,
+  const handleTutorialComplete = async (reportData: Partial<Report>, isPractice: boolean) => {
+      const finalReport = await apiService.createReport({
+          ...reportData,
+          authorId: hero.operativeId,
           isAuthor: true,
           status: isPractice ? 'Practice' : 'Submitted'
-      };
+      });
       setReports(prev => [finalReport, ...prev]);
-      setHero(prev => ({ ...prev, xp: prev.xp + 200 })); // Onboarding bonus
+      setHero(prev => ({ ...prev, xp: prev.xp + 200 })); 
       localStorage.setItem("dpal_first_run_complete", "true");
       setCurrentView('mainMenu');
   };
 
+  const handleSendMessageToRoom = async (reportId: string, text: string, img?: string, aud?: string) => {
+    const msg: ChatMessage = {
+        id: `msg-${Date.now()}`,
+        sender: heroWithRank.name,
+        authorId: hero.operativeId,
+        text,
+        imageUrl: img,
+        audioUrl: aud,
+        timestamp: Date.now(),
+        ledgerProof: `0x${Math.random().toString(16).slice(2, 10)}`,
+        avatarUrl: hero.personas.find(p => p.id === hero.equippedPersonaId)?.imageUrl
+    };
+    
+    try {
+        const savedMsg = await apiService.sendMessage(reportId, msg);
+        setChatsByReportId(prev => ({
+            ...prev,
+            [reportId]: [...(prev[reportId] || []), savedMsg]
+        }));
+    } catch (e) {
+        console.error("Message sync error", e);
+    }
+  };
+
   const handleCertificateReady = (reportId: string, pdfDataUrl: string) => {
     setReports(prev => prev.map(r => r.id === reportId ? { ...r, certificatePdfDataUrl: pdfDataUrl } : r));
-    
-    setChatsByReportId(prev => {
-      const existing = prev[reportId] || [];
-      const reportRef = reports.find(r => r.id === reportId) || completedReport;
-      if (!reportRef) return prev;
-
-      const certMsg: ChatMessage = {
-        id: `sys-cert-${Date.now()}`,
-        sender: "DPAL_SYSTEM",
-        title: "Certificate Issued",
-        text: "Certificate saved to ledger. Tap to view or download.",
-        pdfUrl: pdfDataUrl,
-        timestamp: Date.now(),
-        isSystem: true,
-        ledgerProof: reportRef.hash,
-        avatarUrl: "https://raw.githubusercontent.com/google/material-design-icons/master/png/action/account_balance/white/2x/ic_account_balance_white_48dp.png"
-      };
-
-      const withoutOldCert = existing.filter(m => !m.id.startsWith("sys-cert-"));
-      return { ...prev, [reportId]: [certMsg, ...withoutOldCert] };
-    });
   };
+
+  const handleCompleteMissionStep = useCallback((mission: Mission) => {
+    setMissions(prev => prev.map(m => {
+      if (m.id === mission.id) {
+        const currentActions = m.phase === 'RECON' ? m.reconActions : m.mainActions;
+        const nextIndex = (m.currentActionIndex || 0) + 1;
+        
+        if (nextIndex >= currentActions.length) {
+          if (m.phase === 'RECON') {
+            return { ...m, phase: 'OPERATION', currentActionIndex: 0 };
+          } else {
+            const summary: MissionCompletionSummary = {
+                title: m.title,
+                rewardHeroCredits: m.finalReward.hc,
+                rewardLegendTokens: m.finalReward.legendTokens,
+                rewardNft: m.finalReward.nft
+            };
+            setCompletedMissionSummary(summary);
+            setCurrentView('missionComplete');
+            setHero(prev => ({ 
+                ...prev, 
+                heroCredits: prev.heroCredits + m.finalReward.hc,
+                legendTokens: prev.legendTokens + (m.finalReward.legendTokens || 0),
+                xp: prev.xp + 500
+            }));
+            return { ...m, currentActionIndex: nextIndex, status: 'completed' as const, phase: 'COMPLETED' };
+          }
+        }
+        return { ...m, currentActionIndex: nextIndex };
+      }
+      return m;
+    }));
+  }, []);
+
+  const handleAddHeroPersona = async (description: string, archetype: Archetype, sourceImage?: string, prop?: string, stance?: string, descriptors?: string) => {
+    setNetworkStatus('SYNCING');
+    try {
+        const details = await generateHeroPersonaDetails(description, archetype);
+        const img = await generateHeroPersonaImage(descriptors || description, archetype, prop, stance); 
+        
+        const newPersona: HeroPersona = {
+            id: `persona-${Date.now()}`,
+            prompt: description,
+            name: details.name,
+            backstory: details.backstory,
+            combatStyle: details.combatStyle,
+            imageUrl: img,
+            archetype
+        };
+        
+        setHero(prev => ({
+            ...prev,
+            personas: [...prev.personas, newPersona],
+            equippedPersonaId: prev.equippedPersonaId || newPersona.id
+        }));
+        setNetworkStatus(apiService.isMock() ? 'MOCK' : 'LIVE');
+    } catch (e) {
+        console.error("Synthesis error:", e);
+        setNetworkStatus('OFFLINE');
+    }
+  };
+
+  // RENDER ACCESS GATE
+  if (isTestPhase && !testGranted) {
+    return <TestAccessGate onGranted={() => setTestGranted(true)} />;
+  }
 
   return (
     <div className="min-h-screen flex flex-col transition-all duration-300 bg-zinc-950 text-zinc-100 font-sans selection:bg-cyan-500/30 overflow-x-hidden">
@@ -304,6 +307,7 @@ const App: React.FC = () => {
             hero={heroWithRank} 
             textScale={globalTextScale} 
             setTextScale={setGlobalTextScale} 
+            networkStatus={networkStatus}
         />
       )}
       
@@ -315,7 +319,7 @@ const App: React.FC = () => {
         {currentView === 'tutorial' && (
             <TutorialMissionView 
                 onComplete={handleTutorialComplete}
-                onSkip={() => { localStorage.setItem("dpal_first_run_complete", "true"); setCurrentView('mainMenu'); }}
+                onSkip={() => { setCurrentView('mainMenu'); }}
             />
         )}
         
@@ -434,22 +438,7 @@ const App: React.FC = () => {
             hero={heroWithRank} 
             onReturn={() => setCurrentView('hub')} 
             messages={chatsByReportId[selectedReportForIncidentRoom.id] || []} 
-            onSendMessage={(text, img, aud) => {
-              const msg: ChatMessage = {
-                id: `msg-${Date.now()}`,
-                sender: heroWithRank.name,
-                text,
-                imageUrl: img,
-                audioUrl: aud,
-                timestamp: Date.now(),
-                ledgerProof: `0x${Math.random().toString(16).slice(2)}`,
-                avatarUrl: hero.personas.find(p => p.id === hero.equippedPersonaId)?.imageUrl
-              };
-              setChatsByReportId(prev => ({
-                ...prev,
-                [selectedReportForIncidentRoom.id]: [...(prev[selectedReportForIncidentRoom.id] || []), msg]
-              }));
-            }} 
+            onSendMessage={(text, img, aud) => handleSendMessageToRoom(selectedReportForIncidentRoom.id, text, img, aud)} 
           />
         )}
 

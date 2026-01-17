@@ -1,6 +1,5 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-/* FIX: Removed 'type' prefix from Category import to allow its usage as a value (Category.Other). */
 import { Category, type Report, type FieldPrompt, type MissionAction, type TutorialMission, type SeverityLevel } from '../types';
 import { useTranslations } from '../i18n';
 import { ArrowLeft, CheckCircle, Zap, Clock, ShieldCheck, Target, Camera, Loader, Database, Sparkles, Box, FileText, Activity, X } from './icons';
@@ -27,6 +26,15 @@ const TutorialMissionView: React.FC<TutorialMissionViewProps> = ({ onComplete, o
 
   const activeAction = tutorialReportForDutyMission.actions[activeActionIndex];
   const overlayStep = tutorialOverlaySteps[activeActionIndex];
+
+  // SAFETY: Allow ESC key to exit tutorial at any time
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') onSkip();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onSkip]);
 
   const canAdvance = useMemo(() => {
     return activeAction.requiredPrompts.every(prompt => {
@@ -72,7 +80,6 @@ const TutorialMissionView: React.FC<TutorialMissionViewProps> = ({ onComplete, o
         const finalReport: Partial<Report> = {
             title: isPractice ? `PRACTICE: ${draftReport.category} REPORT` : `GENESIS: ${draftReport.category} REPORT`,
             description: draftReport.summary,
-            /* FIX: Correctly used Category enum value Category.Other. */
             category: (draftReport.category as Category) || Category.Other,
             location: tutorialData.operatingArea || 'Global Sector',
             severity: draftReport.severity,
@@ -238,11 +245,16 @@ const TutorialMissionView: React.FC<TutorialMissionViewProps> = ({ onComplete, o
                     <PanelShell id="action_console" title="Directive_Execution_Link">
                          <div className="p-8 md:p-12 space-y-12">
                             <div className="space-y-4">
-                                <div className="flex items-center space-x-4">
-                                     <div className="p-3 bg-cyan-950/40 rounded-xl border border-cyan-900/40">
-                                         <Zap className="w-6 h-6 text-cyan-400" />
-                                     </div>
-                                     <h2 className="text-4xl font-black uppercase tracking-tighter text-white">{activeAction.title}</h2>
+                                <div className="flex justify-between items-start">
+                                    <div className="flex items-center space-x-4">
+                                        <div className="p-3 bg-cyan-950/40 rounded-xl border border-cyan-900/40">
+                                            <Zap className="w-6 h-6 text-cyan-400" />
+                                        </div>
+                                        <h2 className="text-4xl font-black uppercase tracking-tighter text-white">{activeAction.title}</h2>
+                                    </div>
+                                    <button onClick={onSkip} className="bg-zinc-900 hover:bg-rose-950 text-zinc-500 hover:text-rose-500 px-6 py-3 rounded-xl border border-zinc-800 text-[10px] font-black uppercase tracking-widest transition-all">
+                                        Exit_Induction
+                                    </button>
                                 </div>
                                 <p className="text-base text-zinc-400 font-bold leading-relaxed border-l-4 border-cyan-500 pl-8 italic uppercase">
                                     "{activeAction.objective}"
