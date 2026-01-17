@@ -1,4 +1,3 @@
-
 /**
  * @file This service handles all interactions with the Google Gemini API.
  */
@@ -10,7 +9,8 @@ import { OFFLINE_DIRECTIVES, OFFLINE_INTEL, OFFLINE_TRAINING, OFFLINE_MISSION_TE
 const FLASH_TEXT_MODEL = 'gemini-3-flash-preview'; 
 const IMAGE_GEN_MODEL = 'gemini-2.5-flash-image';
 
-const getApiKey = () => process.env.API_KEY;
+const getApiKey = () => import.meta.env.VITE_GEMINI_API_KEY;
+
 
 export type AiErrorType = 'NOT_CONFIGURED' | 'TEMPORARY_FAILURE' | 'RATE_LIMITED';
 
