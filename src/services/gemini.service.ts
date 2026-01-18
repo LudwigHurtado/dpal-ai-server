@@ -8,11 +8,13 @@ if (!apiKey) {
 
 const genAI = new GoogleGenerativeAI(apiKey);
 
+const MODEL = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+
 export async function runGemini(prompt: string): Promise<string> {
-  const model = genAI.getGenerativeModel({
-    model: "models/gemini-1.5-pro"
-  });
+  const model = genAI.getGenerativeModel({ model: MODEL });
 
   const result = await model.generateContent(prompt);
-  return result.response.text();
+  const text = result.response.text();
+
+  return text || "";
 }
