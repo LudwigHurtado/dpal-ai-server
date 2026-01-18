@@ -10,12 +10,9 @@ const genAI = new GoogleGenerativeAI(apiKey);
 
 export async function runGemini(prompt: string): Promise<string> {
   const model = genAI.getGenerativeModel({
-    model: "gemini-1.0-pro"
+    model: "models/gemini-1.5-pro"
   });
 
   const result = await model.generateContent(prompt);
-  const response = result.response;
-
-  return response.text();
+  return result.response.text();
 }
-
