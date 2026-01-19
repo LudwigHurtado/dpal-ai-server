@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2022",
+<<<<<<< HEAD
     "experimentalDecorators": true,
     "useDefineForClassFields": false,
     "module": "ESNext",
@@ -17,5 +18,13 @@
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
+=======
+    "module": "CommonJS",
+    "outDir": "dist",
+    "rootDir": "src",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true
+>>>>>>> 09395516b8a6f0b0cf0657793dc4d940d6ab108d
   }
 }
