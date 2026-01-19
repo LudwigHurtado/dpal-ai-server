@@ -1,15 +1,15 @@
 // src/minting/mintRoute.ts
 // Express route handler for Railway backend.
-// No breaking changes. New endpoint is additive.
+// Additive endpoint only.
 //
 // POST /api/mint
-// Required headers:
-// x-dpal-timestamp: unix seconds or ms
-// x-dpal-nonce: unique per request
-// x-dpal-signature: hex HMAC SHA256
-// x-dpal-caller: optional, enforced if DPAL_MINT_ALLOWED_CALLERS is set
+// Required headers.
+// x-dpal-timestamp. Unix seconds or ms.
+// x-dpal-nonce. Unique per request.
+// x-dpal-signature. Hex HMAC SHA256.
+// x-dpal-caller. Optional. Enforced if DPAL_MINT_ALLOWED_CALLERS is set.
 //
-// Body:
+// Body.
 // {
 //   "mintId": "string",
 //   "recipientId": "string",
@@ -26,10 +26,10 @@ function readRawBodyBuffer(req: Request): Buffer {
   const anyReq = req as any;
   const raw = anyReq.rawBody;
 
-  if (Buffer.isBuffer(raw)) return raw;
+  if (Buffer.isBuffer(raw)) {
+    return raw;
+  }
 
-  // If your server does not capture rawBody, add the middleware shown below.
-  // Fallback. This can change hashing if body parser modified content.
   return Buffer.from(JSON.stringify(req.body || {}), "utf8");
 }
 
