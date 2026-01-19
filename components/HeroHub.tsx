@@ -34,6 +34,8 @@ interface HeroHubProps {
   onNavigate: (view: any) => void;
   activeTab: any;
   setActiveTab: (tab: any) => void;
+  onEraseProfile?: () => void;
+
 }
 
 const QUICK_LOCATIONS = ["San Jose, CA", "Los Angeles, CA", "Chicago, IL", "New York, NY", "London, UK"];
@@ -267,13 +269,23 @@ const HeroHub: React.FC<HeroHubProps> = ({
         <div className="animate-fade-in-fast relative h-full">
             {activeTab === 'profile' && (
               <HeroProfileTab 
-                hero={hero} 
-                setHero={setHero} 
+                hero={hero}
+                setHero={setHero}
                 onNavigate={onNavigate}
                 onAddHeroPersona={onAddHeroPersona}
                 onDeleteHeroPersona={onDeleteHeroPersona}
                 onEquipHeroPersona={onEquipHeroPersona}
                 onGenerateBackstory={onGenerateHeroBackstory}
+                onEraseProfile={onEraseProfile}
+/>
+
+
+
+
+
+
+
+
               />
             )}
 

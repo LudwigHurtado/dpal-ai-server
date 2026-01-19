@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Header from './components/Header';
 import FilterPanel from './components/FilterPanel';
 import MainContentPanel from './components/MainContentPanel';
@@ -43,8 +42,22 @@ export type TextScale = 'standard' | 'large' | 'ultra' | 'magnified';
 
 const getInitialHero = (): Hero => {
   const saved = localStorage.getItem('dpal-hero');
-  if (saved) { try { return JSON.parse(saved); } catch (e) { return INITIAL_HERO_PROFILE; } }
+  if (saved) {
+    try {
+      return JSON.parse(saved);
+    } catch (e) {
+      return INITIAL_HERO_PROFILE;
+    }
+  }
   return INITIAL_HERO_PROFILE;
+};
+
+const getTestPhaseFlag = (): boolean => {
+  // Vite only exposes env vars prefixed with VITE_ into browser builds.
+  // Fallback to process.env for non-Vite environments.
+  const viteEnv = (import.meta as any)?.env || {};
+  const raw = viteEnv.VITE_DPAL_TEST_PHASE ?? (globalThis as any)?.process?.env?.DPAL_TEST_PHASE;
+  return String(raw ?? 'true') !== 'false';
 };
 
 const fileToBase64 = (file: File): Promise<string> => {
@@ -58,7 +71,7 @@ const fileToBase64 = (file: File): Promise<string> => {
 
 const App: React.FC = () => {
   // TEST ACCESS GATE LOGIC
-  const isTestPhase = process.env.DPAL_TEST_PHASE !== 'false';
+  const isTestPhase = getTestPhaseFlag();
   const [testGranted, setTestGranted] = useState(() => localStorage.getItem('dpal_test_access_granted_v1') === 'true');
 
   const [reports, setReports] = useState<Report[]>([]);
@@ -67,13 +80,13 @@ const App: React.FC = () => {
   const [prevView, setPrevView] = useState<View>('mainMenu');
   const [heroHubTab, setHeroHubTab] = useState<'profile' | 'missions' | 'skills' | 'training' | 'briefing' | 'collection' | 'mint' | 'store'>('profile');
   const [hubTab, setHubTab] = useState<'my_reports' | 'community' | 'work_feed'>('my_reports');
-  const [filters, setFilters] = useState({ keyword: '', selectedCategories: [] as Category[], location: '', });
+  const [filters, setFilters] = useState({ keyword: '', selectedCategories: [] as Category[], location: '' });
   const [networkStatus, setNetworkStatus] = useState<'OFFLINE' | 'SYNCING' | 'LIVE' | 'MOCK'>('OFFLINE');
 
   const [selectedCategoryForSubmission, setSelectedCategoryForSubmission] = useState<Category | null>(null);
   const [selectedIntelForMission, setSelectedIntelForMission] = useState<IntelItem | null>(null);
   const [initialCategoriesForIntel, setInitialCategoriesForIntel] = useState<Category[]>([]);
-  
+
   const [missions, setMissions] = useState<Mission[]>([]);
   const [hero, setHero] = useState<Hero>(getInitialHero);
   const [heroLocation, setHeroLocation] = useState<string>('');
@@ -92,7 +105,7 @@ const App: React.FC = () => {
       setReports(liveReports.length > 0 ? liveReports : MOCK_REPORTS);
       setNetworkStatus(apiService.isMock() ? 'MOCK' : 'LIVE');
     } catch (e) {
-      console.error("Live sync failure", e);
+      console.error('Live sync failure', e);
       setNetworkStatus('OFFLINE');
     }
   }, []);
@@ -116,24 +129,27 @@ const App: React.FC = () => {
   }, [hero]);
 
   const goBack = useCallback(() => {
-      if (currentView === 'mainMenu' || currentView === 'tutorial') return;
-      setCurrentView(prevView || 'mainMenu');
+    if (currentView === 'mainMenu' || currentView === 'tutorial') return;
+    setCurrentView(prevView || 'mainMenu');
   }, [currentView, prevView]);
 
   const heroWithRank = useMemo((): Hero => {
     let currentRank: Rank = RANKS[0];
-    for (const rank of RANKS) { if (hero.xp >= rank.xpNeeded) currentRank = rank; else break; }
+    for (const rank of RANKS) {
+      if (hero.xp >= rank.xpNeeded) currentRank = rank;
+      else break;
+    }
     return { ...hero, rank: currentRank.level, title: hero.equippedTitle || currentRank.title };
   }, [hero]);
 
   const filteredReports = useMemo(() => {
     return reports.filter(report => {
-      const matchesKeyword = !filters.keyword || 
+      const matchesKeyword = !filters.keyword ||
         report.title.toLowerCase().includes(filters.keyword.toLowerCase()) ||
         report.description.toLowerCase().includes(filters.keyword.toLowerCase());
-      const matchesCategory = filters.selectedCategories.length === 0 || 
+      const matchesCategory = filters.selectedCategories.length === 0 ||
         filters.selectedCategories.includes(report.category);
-      const matchesLocation = !filters.location || 
+      const matchesLocation = !filters.location ||
         report.location.toLowerCase().includes(filters.location.toLowerCase());
       return matchesKeyword && matchesCategory && matchesLocation;
     });
@@ -142,86 +158,85 @@ const App: React.FC = () => {
   const handleNavigate = (view: View, category?: Category, targetTab?: any) => {
     const aiViews: View[] = ['liveIntelligence', 'generateMission', 'trainingHolodeck', 'aiWorkDirectives'];
     if (aiViews.includes(view) && !isAiEnabled() && !isOfflineMode) {
-        setPrevView(currentView);
-        setCurrentView('aiSetup');
-        return;
+      setPrevView(currentView);
+      setCurrentView('aiSetup');
+      return;
     }
     setPrevView(currentView);
-    if (category) { 
-        setSelectedCategoryForSubmission(category); 
-        setCurrentView('reportSubmission'); 
-    } 
-    else { 
-        if (view === 'heroHub' && targetTab) setHeroHubTab(targetTab); 
-        if (view === 'hub' && targetTab) setHubTab(targetTab); 
-        setCurrentView(view); 
+    if (category) {
+      setSelectedCategoryForSubmission(category);
+      setCurrentView('reportSubmission');
+    } else {
+      if (view === 'heroHub' && targetTab) setHeroHubTab(targetTab);
+      if (view === 'hub' && targetTab) setHubTab(targetTab);
+      setCurrentView(view);
     }
   };
 
   const handleAddReport = async (rep: any) => {
     setNetworkStatus('SYNCING');
     try {
-        // FIX: Handle File objects for mock serialization
-        const processedImageUrls = [...(rep.imageUrls || [])];
-        if (apiService.isMock() && rep.attachments) {
-            const fileAttachments = rep.attachments.filter((a: any) => a instanceof File);
-            const base64Proms = fileAttachments.map((f: File) => fileToBase64(f));
-            const base64Results = await Promise.all(base64Proms);
-            processedImageUrls.push(...base64Results);
-        }
+      // FIX: Handle File objects for mock serialization
+      const processedImageUrls = [...(rep.imageUrls || [])];
+      if (apiService.isMock() && rep.attachments) {
+        const fileAttachments = rep.attachments.filter((a: any) => a instanceof File);
+        const base64Proms = fileAttachments.map((f: File) => fileToBase64(f));
+        const base64Results = await Promise.all(base64Proms);
+        processedImageUrls.push(...base64Results);
+      }
 
-        const finalReport = await apiService.createReport({
-            ...rep,
-            imageUrls: processedImageUrls,
-            authorId: hero.operativeId,
-            isAuthor: true,
-            attachments: undefined // Do not store raw File objects in ledger
-        });
+      const finalReport = await apiService.createReport({
+        ...rep,
+        imageUrls: processedImageUrls,
+        authorId: hero.operativeId,
+        isAuthor: true,
+        attachments: undefined // Do not store raw File objects in ledger
+      });
 
-        setReports(prev => [finalReport, ...prev]);
-        setCompletedReport(finalReport);
-        setCurrentView('reportComplete');
-        setNetworkStatus(apiService.isMock() ? 'MOCK' : 'LIVE');
+      setReports(prev => [finalReport, ...prev]);
+      setCompletedReport(finalReport);
+      setCurrentView('reportComplete');
+      setNetworkStatus(apiService.isMock() ? 'MOCK' : 'LIVE');
     } catch (e) {
-        alert("Transmission to ledger failed. Local buffer only.");
-        setNetworkStatus('OFFLINE');
+      alert('Transmission to ledger failed. Local buffer only.');
+      setNetworkStatus('OFFLINE');
     }
   };
 
   const handleTutorialComplete = async (reportData: Partial<Report>, isPractice: boolean) => {
-      const finalReport = await apiService.createReport({
-          ...reportData,
-          authorId: hero.operativeId,
-          isAuthor: true,
-          status: isPractice ? 'Practice' : 'Submitted'
-      });
-      setReports(prev => [finalReport, ...prev]);
-      setHero(prev => ({ ...prev, xp: prev.xp + 200 })); 
-      localStorage.setItem("dpal_first_run_complete", "true");
-      setCurrentView('mainMenu');
+    const finalReport = await apiService.createReport({
+      ...reportData,
+      authorId: hero.operativeId,
+      isAuthor: true,
+      status: isPractice ? 'Practice' : 'Submitted'
+    });
+    setReports(prev => [finalReport, ...prev]);
+    setHero(prev => ({ ...prev, xp: prev.xp + 200 }));
+    localStorage.setItem('dpal_first_run_complete', 'true');
+    setCurrentView('mainMenu');
   };
 
   const handleSendMessageToRoom = async (reportId: string, text: string, img?: string, aud?: string) => {
     const msg: ChatMessage = {
-        id: `msg-${Date.now()}`,
-        sender: heroWithRank.name,
-        authorId: hero.operativeId,
-        text,
-        imageUrl: img,
-        audioUrl: aud,
-        timestamp: Date.now(),
-        ledgerProof: `0x${Math.random().toString(16).slice(2, 10)}`,
-        avatarUrl: hero.personas.find(p => p.id === hero.equippedPersonaId)?.imageUrl
+      id: `msg-${Date.now()}`,
+      sender: heroWithRank.name,
+      authorId: hero.operativeId,
+      text,
+      imageUrl: img,
+      audioUrl: aud,
+      timestamp: Date.now(),
+      ledgerProof: `0x${Math.random().toString(16).slice(2, 10)}`,
+      avatarUrl: hero.personas.find(p => p.id === hero.equippedPersonaId)?.imageUrl
     };
-    
+
     try {
-        const savedMsg = await apiService.sendMessage(reportId, msg);
-        setChatsByReportId(prev => ({
-            ...prev,
-            [reportId]: [...(prev[reportId] || []), savedMsg]
-        }));
+      const savedMsg = await apiService.sendMessage(reportId, msg);
+      setChatsByReportId(prev => ({
+        ...prev,
+        [reportId]: [...(prev[reportId] || []), savedMsg]
+      }));
     } catch (e) {
-        console.error("Message sync error", e);
+      console.error('Message sync error', e);
     }
   };
 
@@ -234,24 +249,24 @@ const App: React.FC = () => {
       if (m.id === mission.id) {
         const currentActions = m.phase === 'RECON' ? m.reconActions : m.mainActions;
         const nextIndex = (m.currentActionIndex || 0) + 1;
-        
+
         if (nextIndex >= currentActions.length) {
           if (m.phase === 'RECON') {
             return { ...m, phase: 'OPERATION', currentActionIndex: 0 };
           } else {
             const summary: MissionCompletionSummary = {
-                title: m.title,
-                rewardHeroCredits: m.finalReward.hc,
-                rewardLegendTokens: m.finalReward.legendTokens,
-                rewardNft: m.finalReward.nft
+              title: m.title,
+              rewardHeroCredits: m.finalReward.hc,
+              rewardLegendTokens: m.finalReward.legendTokens,
+              rewardNft: m.finalReward.nft
             };
             setCompletedMissionSummary(summary);
             setCurrentView('missionComplete');
-            setHero(prev => ({ 
-                ...prev, 
-                heroCredits: prev.heroCredits + m.finalReward.hc,
-                legendTokens: prev.legendTokens + (m.finalReward.legendTokens || 0),
-                xp: prev.xp + 500
+            setHero(prev => ({
+              ...prev,
+              heroCredits: prev.heroCredits + m.finalReward.hc,
+              legendTokens: prev.legendTokens + (m.finalReward.legendTokens || 0),
+              xp: prev.xp + 500
             }));
             return { ...m, currentActionIndex: nextIndex, status: 'completed' as const, phase: 'COMPLETED' };
           }
@@ -265,30 +280,37 @@ const App: React.FC = () => {
   const handleAddHeroPersona = async (description: string, archetype: Archetype, sourceImage?: string, prop?: string, stance?: string, descriptors?: string) => {
     setNetworkStatus('SYNCING');
     try {
-        const details = await generateHeroPersonaDetails(description, archetype);
-        const img = await generateHeroPersonaImage(descriptors || description, archetype, prop, stance); 
-        
-        const newPersona: HeroPersona = {
-            id: `persona-${Date.now()}`,
-            prompt: description,
-            name: details.name,
-            backstory: details.backstory,
-            combatStyle: details.combatStyle,
-            imageUrl: img,
-            archetype
-        };
-        
-        setHero(prev => ({
-            ...prev,
-            personas: [...prev.personas, newPersona],
-            equippedPersonaId: prev.equippedPersonaId || newPersona.id
-        }));
-        setNetworkStatus(apiService.isMock() ? 'MOCK' : 'LIVE');
+      const details = await generateHeroPersonaDetails(description, archetype);
+      const img = await generateHeroPersonaImage(descriptors || description, archetype, prop, stance);
+
+      const newPersona: HeroPersona = {
+        id: `persona-${Date.now()}`,
+        prompt: description,
+        name: details.name,
+        backstory: details.backstory,
+        combatStyle: details.combatStyle,
+        imageUrl: img,
+        archetype
+      };
+
+      setHero(prev => ({
+        ...prev,
+        personas: [...prev.personas, newPersona],
+        equippedPersonaId: prev.equippedPersonaId || newPersona.id
+      }));
+      setNetworkStatus(apiService.isMock() ? 'MOCK' : 'LIVE');
     } catch (e) {
-        console.error("Synthesis error:", e);
-        setNetworkStatus('OFFLINE');
+      console.error('Synthesis error:', e);
+      setNetworkStatus('OFFLINE');
     }
   };
+
+  const handleEraseProfile = useCallback(() => {
+    const shouldErase = confirm('Erase local operative profile data and restore baseline settings?');
+    if (!shouldErase) return;
+    localStorage.removeItem('dpal-hero');
+    setHero(INITIAL_HERO_PROFILE);
+  }, []);
 
   // RENDER ACCESS GATE
   if (isTestPhase && !testGranted) {
@@ -298,122 +320,150 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen flex flex-col transition-all duration-300 bg-zinc-950 text-zinc-100 font-sans selection:bg-cyan-500/30 overflow-x-hidden">
       {currentView !== 'tutorial' && (
-        <Header 
-            onNavigateToHeroHub={() => handleNavigate('heroHub', undefined, 'profile')} 
-            onNavigateHome={() => setCurrentView('mainMenu')} 
-            onNavigateToReputationAndCurrency={() => setCurrentView('reputationAndCurrency')} 
-            onNavigateMissions={() => handleNavigate('liveIntelligence')} 
-            onNavigate={handleNavigate} 
-            hero={heroWithRank} 
-            textScale={globalTextScale} 
-            setTextScale={setGlobalTextScale} 
-            networkStatus={networkStatus}
+        <Header
+          onNavigateToHeroHub={() => handleNavigate('heroHub', undefined, 'profile')}
+          onNavigateHome={() => setCurrentView('mainMenu')}
+          onNavigateToReputationAndCurrency={() => setCurrentView('reputationAndCurrency')}
+          onNavigateMissions={() => handleNavigate('liveIntelligence')}
+          onNavigate={handleNavigate}
+          hero={heroWithRank}
+          textScale={globalTextScale}
+          setTextScale={setGlobalTextScale}
+          networkStatus={networkStatus}
         />
       )}
-      
+
       <main className={`${currentView === 'tutorial' ? 'p-0' : 'container mx-auto px-4 py-8'} flex-grow relative z-10`}>
         {currentView === 'aiSetup' && (
-          <AiSetupView onReturn={() => setCurrentView('mainMenu')} onEnableOfflineMode={() => { setIsOfflineMode(true); setCurrentView(prevView || 'mainMenu'); }} />
+          <AiSetupView
+            onReturn={() => setCurrentView('mainMenu')}
+            onEnableOfflineMode={() => { setIsOfflineMode(true); setCurrentView(prevView || 'mainMenu'); }}
+          />
         )}
 
         {currentView === 'tutorial' && (
-            <TutorialMissionView 
-                onComplete={handleTutorialComplete}
-                onSkip={() => { setCurrentView('mainMenu'); }}
-            />
+          <TutorialMissionView
+            onComplete={handleTutorialComplete}
+            onSkip={() => { setCurrentView('mainMenu'); }}
+          />
         )}
-        
+
         {currentView === 'mainMenu' && (
-          <MainMenu onNavigate={handleNavigate} totalReports={reports.length} onGenerateMissionForCategory={(cat) => { setInitialCategoriesForIntel([cat]); handleNavigate('liveIntelligence'); }} />
+          <MainMenu
+            onNavigate={handleNavigate}
+            totalReports={reports.length}
+            onGenerateMissionForCategory={(cat) => { setInitialCategoriesForIntel([cat]); handleNavigate('liveIntelligence'); }}
+          />
         )}
 
         {currentView === 'categorySelection' && (
-          <CategorySelectionView 
-            onSelectCategory={(cat) => handleNavigate('reportSubmission', cat)} 
-            onSelectMissions={(cat) => { setInitialCategoriesForIntel([cat]); handleNavigate('liveIntelligence'); }} 
-            onReturnToHub={() => setCurrentView('mainMenu')} 
+          <CategorySelectionView
+            onSelectCategory={(cat) => handleNavigate('reportSubmission', cat)}
+            onSelectMissions={(cat) => { setInitialCategoriesForIntel([cat]); handleNavigate('liveIntelligence'); }}
+            onReturnToHub={() => setCurrentView('mainMenu')}
           />
         )}
 
         {currentView === 'reportSubmission' && selectedCategoryForSubmission && (
-          <ReportSubmissionView 
-            category={selectedCategoryForSubmission} 
-            role={null} 
-            onReturn={() => setCurrentView('categorySelection')} 
-            addReport={handleAddReport} 
-            totalReports={reports.length} 
+          <ReportSubmissionView
+            category={selectedCategoryForSubmission}
+            role={null}
+            onReturn={() => setCurrentView('categorySelection')}
+            addReport={handleAddReport}
+            totalReports={reports.length}
           />
         )}
 
         {currentView === 'reportComplete' && completedReport && (
-          <ReportCompleteView 
-            report={completedReport} 
-            onReturn={() => setCurrentView('mainMenu')} 
-            onEnterSituationRoom={(r) => { setSelectedReportForIncidentRoom(r); setCurrentView('incidentRoom'); }} 
+          <ReportCompleteView
+            report={completedReport}
+            onReturn={() => setCurrentView('mainMenu')}
+            onEnterSituationRoom={(r) => { setSelectedReportForIncidentRoom(r); setCurrentView('incidentRoom'); }}
             onCertificateReady={handleCertificateReady}
           />
         )}
 
         {currentView === 'hub' && (
           <div className="space-y-10 flex flex-col h-full">
-            <LedgerScanner reports={reports} onTargetFound={(r) => { setSelectedReportForIncidentRoom(r); setCurrentView('incidentRoom'); }} />
+            <LedgerScanner
+              reports={reports}
+              onTargetFound={(r) => { setSelectedReportForIncidentRoom(r); setCurrentView('incidentRoom'); }}
+            />
             <div className="flex-grow">
-                <MainContentPanel 
-                    reports={reports} 
-                    filteredReports={filteredReports} 
-                    analysis={null} 
-                    analysisError={null} 
-                    onCloseAnalysis={() => {}} 
-                    onAddReportImage={() => {}} 
-                    onReturnToMainMenu={() => setCurrentView('mainMenu')} 
-                    onJoinReportChat={(r) => { setSelectedReportForIncidentRoom(r); setCurrentView('incidentRoom'); }} 
-                    activeTab={hubTab} 
-                    setActiveTab={setHubTab} 
-                    onAddNewReport={() => handleNavigate('categorySelection')} 
-                    filters={filters}
-                    setFilters={setFilters}
-                    hero={heroWithRank}
-                />
+              <MainContentPanel
+                reports={reports}
+                filteredReports={filteredReports}
+                analysis={null}
+                analysisError={null}
+                onCloseAnalysis={() => {}}
+                onAddReportImage={() => {}}
+                onReturnToMainMenu={() => setCurrentView('mainMenu')}
+                onJoinReportChat={(r) => { setSelectedReportForIncidentRoom(r); setCurrentView('incidentRoom'); }}
+                activeTab={hubTab}
+                setActiveTab={setHubTab}
+                onAddNewReport={() => handleNavigate('categorySelection')}
+                filters={filters}
+                setFilters={setFilters}
+                hero={heroWithRank}
+              />
             </div>
           </div>
         )}
 
         {currentView === 'liveIntelligence' && (
-          <LiveIntelligenceView onReturn={() => setCurrentView(prevView === 'heroHub' ? 'heroHub' : 'mainMenu')} onGenerateMission={(intel) => { setSelectedIntelForMission(intel); setCurrentView('generateMission'); }} heroLocation={heroLocation} setHeroLocation={setHeroLocation} initialCategories={initialCategoriesForIntel} textScale={globalTextScale} />
+          <LiveIntelligenceView
+            onReturn={() => setCurrentView(prevView === 'heroHub' ? 'heroHub' : 'mainMenu')}
+            onGenerateMission={(intel) => { setSelectedIntelForMission(intel); setCurrentView('generateMission'); }}
+            heroLocation={heroLocation}
+            setHeroLocation={setHeroLocation}
+            initialCategories={initialCategoriesForIntel}
+            textScale={globalTextScale}
+          />
         )}
 
         {currentView === 'generateMission' && selectedIntelForMission && (
-          <GenerateMissionView intelItem={selectedIntelForMission} onReturn={() => handleNavigate('liveIntelligence')} onAcceptMission={async (intel, approach, goal) => {
+          <GenerateMissionView
+            intelItem={selectedIntelForMission}
+            onReturn={() => handleNavigate('liveIntelligence')}
+            onAcceptMission={async (intel, approach, goal) => {
               const m = await generateMissionFromIntel(intel, approach, goal);
               const structuredM: Mission = {
-                  ...m,
-                  id: `msn-${Date.now()}`,
-                  phase: 'RECON',
-                  currentActionIndex: 0,
-                  status: 'active',
-                  reconActions: [
-                      { id: 'p-rec-1', type: 'confirmation', promptText: 'GPS Link Verified', required: true, responseType: 'checkbox', storedAs: { entity: 'riskAssessment', field: 'gps_verified' } },
-                      { id: 'p-rec-2', type: 'observation', promptText: 'Sector count verified', required: true, responseType: 'text', storedAs: { entity: 'missionLog', field: 'impact_count' } },
-                  ],
-                  mainActions: (m.steps || []).map((s: any, i: number) => ({
-                      id: `act-${i}`,
-                      name: s.name,
-                      task: s.task,
-                      whyItMatters: s.whyItMatters || "Primary field directive.",
-                      icon: s.icon,
-                      priority: s.priority || 'Medium',
-                      isComplete: false,
-                      prompts: s.prompts || [],
-                      impactedSkills: ['Forensic', 'Tactical']
-                  }))
+                ...m,
+                id: `msn-${Date.now()}`,
+                phase: 'RECON',
+                currentActionIndex: 0,
+                status: 'active',
+                reconActions: [
+                  { id: 'p-rec-1', type: 'confirmation', promptText: 'GPS Link Verified', required: true, responseType: 'checkbox', storedAs: { entity: 'riskAssessment', field: 'gps_verified' } },
+                  { id: 'p-rec-2', type: 'observation', promptText: 'Sector count verified', required: true, responseType: 'text', storedAs: { entity: 'missionLog', field: 'impact_count' } },
+                ],
+                mainActions: (m.steps || []).map((s: any, i: number) => ({
+                  id: `act-${i}`,
+                  name: s.name,
+                  task: s.task,
+                  whyItMatters: s.whyItMatters || 'Primary field directive.',
+                  icon: s.icon,
+                  priority: s.priority || 'Medium',
+                  isComplete: false,
+                  prompts: s.prompts || [],
+                  impactedSkills: ['Forensic', 'Tactical']
+                }))
               };
               setMissions(prev => [structuredM, ...prev]);
               handleNavigate('heroHub', undefined, 'missions');
-          }} />
+            }}
+          />
         )}
 
         {currentView === 'missionDetail' && selectedMissionForDetail && (
-          <MissionDetailView mission={selectedMissionForDetail} onReturn={() => handleNavigate('heroHub', undefined, 'missions')} messages={[]} onSendMessage={() => {}} hero={heroWithRank} onCompleteMissionStep={handleCompleteMissionStep} />
+          <MissionDetailView
+            mission={selectedMissionForDetail}
+            onReturn={() => handleNavigate('heroHub', undefined, 'missions')}
+            messages={[]}
+            onSendMessage={() => {}}
+            hero={heroWithRank}
+            onCompleteMissionStep={handleCompleteMissionStep}
+          />
         )}
 
         {currentView === 'missionComplete' && completedMissionSummary && (
@@ -421,11 +471,42 @@ const App: React.FC = () => {
         )}
 
         {currentView === 'heroHub' && (
-          <HeroHub onReturnToHub={() => setCurrentView('mainMenu')} missions={missions} isLoadingMissions={false} hero={heroWithRank} setHero={setHero} heroLocation={heroLocation} setHeroLocation={setHeroLocation} onGenerateNewMissions={() => {}} onMintNft={async () => ({} as any)} reports={reports} iapPacks={IAP_PACKS} storeItems={STORE_ITEMS} onInitiateHCPurchase={() => {}} onInitiateStoreItemPurchase={() => {}} onAddHeroPersona={handleAddHeroPersona} onDeleteHeroPersona={() => {}} onEquipHeroPersona={(pid) => setHero(prev => ({ ...prev, equippedPersonaId: pid }))} onGenerateHeroBackstory={async () => {}} onNavigateToMissionDetail={(m) => { setSelectedMissionForDetail(m); setCurrentView('missionDetail'); }} onNavigate={handleNavigate} activeTab={heroHubTab} setActiveTab={setHeroHubTab} />
+          <HeroHub
+            onReturnToHub={() => setCurrentView('mainMenu')}
+            missions={missions}
+            isLoadingMissions={false}
+            hero={heroWithRank}
+            setHero={setHero}
+            heroLocation={heroLocation}
+            setHeroLocation={setHeroLocation}
+            onGenerateNewMissions={() => {}}
+            onMintNft={async () => ({} as any)}
+            reports={reports}
+            iapPacks={IAP_PACKS}
+            storeItems={STORE_ITEMS}
+            onInitiateHCPurchase={() => {}}
+            onInitiateStoreItemPurchase={() => {}}
+            onAddHeroPersona={handleAddHeroPersona}
+            onDeleteHeroPersona={() => {}}
+            onEquipHeroPersona={(pid) => setHero(prev => ({ ...prev, equippedPersonaId: pid }))}
+            onGenerateHeroBackstory={async () => {}}
+            onEraseProfile={handleEraseProfile}
+            onNavigateToMissionDetail={(m) => { setSelectedMissionForDetail(m); setCurrentView('missionDetail'); }}
+            onNavigate={handleNavigate}
+            activeTab={heroHubTab}
+            setActiveTab={setHeroHubTab}
+          />
         )}
 
         {currentView === 'transparencyDatabase' && (
-          <TransparencyDatabaseView onReturn={() => setCurrentView('mainMenu')} hero={heroWithRank} reports={reports} filters={filters} setFilters={setFilters} onJoinReportChat={(r) => { setSelectedReportForIncidentRoom(r); setCurrentView('incidentRoom'); }} />
+          <TransparencyDatabaseView
+            onReturn={() => setCurrentView('mainMenu')}
+            hero={heroWithRank}
+            reports={reports}
+            filters={filters}
+            setFilters={setFilters}
+            onJoinReportChat={(r) => { setSelectedReportForIncidentRoom(r); setCurrentView('incidentRoom'); }}
+          />
         )}
 
         {currentView === 'trainingHolodeck' && (
@@ -433,12 +514,12 @@ const App: React.FC = () => {
         )}
 
         {currentView === 'incidentRoom' && selectedReportForIncidentRoom && (
-          <IncidentRoomView 
-            report={selectedReportForIncidentRoom} 
-            hero={heroWithRank} 
-            onReturn={() => setCurrentView('hub')} 
-            messages={chatsByReportId[selectedReportForIncidentRoom.id] || []} 
-            onSendMessage={(text, img, aud) => handleSendMessageToRoom(selectedReportForIncidentRoom.id, text, img, aud)} 
+          <IncidentRoomView
+            report={selectedReportForIncidentRoom}
+            hero={heroWithRank}
+            onReturn={() => setCurrentView('hub')}
+            messages={chatsByReportId[selectedReportForIncidentRoom.id] || []}
+            onSendMessage={(text, img, aud) => handleSendMessageToRoom(selectedReportForIncidentRoom.id, text, img, aud)}
           />
         )}
 
