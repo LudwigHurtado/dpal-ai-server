@@ -5,7 +5,6 @@ import { ArrowLeft, Broadcast, ShieldCheck, Zap, Target, Clock, MapPin, CheckCir
 import MissionChatroom from './MissionChatroom';
 import { CATEGORIES_WITH_ICONS } from '../constants';
 import { performIAReview } from '../services/geminiService';
-import { apiService } from '../services/apiService';
 
 interface IncidentRoomViewProps {
     report: Report;
@@ -54,29 +53,10 @@ const IncidentRoomView: React.FC<IncidentRoomViewProps> = ({ report, onReturn, h
     const [isBeaconActive, setIsBeaconActive] = useState(false);
     const [mapLoading, setMapLoading] = useState(false);
     const [mapInteractive, setMapInteractive] = useState(false);
-    const [roomMessages, setRoomMessages] = useState<ChatMessage[]>(messages);
     
     const [beaconInput, setBeaconInput] = useState(report.location || '');
     const [lockedMapLocation, setLockedMapLocation] = useState(report.location || '');
-
-    // LIVE MESSAGE SYNC POLLING
-    useEffect(() => {
-        const syncMessages = async () => {
-            try {
-                const liveMsgs = await apiService.getMessages(report.id);
-                // Only update if we have new messages from other users
-                if (liveMsgs.length > roomMessages.length) {
-                    setRoomMessages(liveMsgs);
-                }
-            } catch (e) {
-                console.error("Live sync failure", e);
-            }
-        };
-
-        syncMessages();
-        const interval = setInterval(syncMessages, 5000); // Check for new dispatches every 5 seconds
-        return () => clearInterval(interval);
-    }, [report.id, roomMessages.length]);
+    const [findings, setFindings] = useState<Record<string, Finding[]>>({});
 
     const activeSector = useMemo(() => sectors.find(s => s.id === activeSectorId) || sectors[0], [sectors, activeSectorId]);
     const roomNumber = report.id.split('-').pop()?.toUpperCase() || '0000';
@@ -93,6 +73,31 @@ const IncidentRoomView: React.FC<IncidentRoomViewProps> = ({ report, onReturn, h
         setLockedMapLocation(beaconInput);
         setIsBeaconActive(true);
         onSendMessage(`[BEACON_DEPLOYED]: Global Signal Active in ${beaconInput.toUpperCase()}. Directive: Forensic verification requested.`);
+    };
+
+    const runDiagnostic = async () => {
+        setIsScanning(true);
+        try {
+            if (activeSectorId === 'audit') {
+                await new Promise(r => setTimeout(r, 1500));
+                const mockFindings: Finding[] = [
+                    { id: `FND-01`, title: 'Consensus Check', value: '4/5 Guardians Confirmed', status: 'VERIFIED', hash: '0x3E12B' },
+                    { id: `FND-02`, title: 'Biometric Validity', status: 'MATCHED', value: 'Author Identity Sync OK', hash: '0xA119' }
+                ];
+                setFindings(prev => ({ ...prev, [activeSectorId]: mockFindings }));
+            } else if (activeSectorId === 'intel') {
+                const result = await performIAReview(report);
+                setFindings(prev => ({ ...prev, [activeSectorId]: result.findings }));
+            } else {
+                await new Promise(r => setTimeout(r, 1200));
+                const mockFindings: Finding[] = [
+                    { id: `FND-COM`, title: 'Network Echo', value: 'Regional node broadcast stable', status: 'VERIFIED', hash: '0x99FF' }
+                ];
+                setFindings(prev => ({ ...prev, [activeSectorId]: mockFindings }));
+            }
+        } finally {
+            setIsScanning(false);
+        }
     };
 
     const mapUrl = useMemo(() => {
@@ -122,10 +127,10 @@ const IncidentRoomView: React.FC<IncidentRoomViewProps> = ({ report, onReturn, h
                     </div>
                 </div>
                 <div className="flex items-center gap-4 md:gap-8">
-                    <div className="hidden sm:flex items-center space-x-2 bg-emerald-950/20 px-4 py-1 rounded-full border border-emerald-500/30">
-                         <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
-                         <span className="text-[8px] font-black uppercase text-emerald-500 tracking-widest">LIVE_SYNC_READY</span>
-                    </div>
+                    <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="hidden sm:flex items-center space-x-4 text-xs font-black uppercase tracking-[0.3em] text-emerald-500 bg-emerald-950/20 px-6 py-2.5 rounded-2xl border-2 border-emerald-800/40 hover:bg-emerald-500 hover:text-black transition-all shadow-lg">
+                        <Monitor className="w-5 h-5" />
+                        <span>{isSidebarCollapsed ? 'INTEL_ON' : 'INTEL_OFF'}</span>
+                    </button>
                     <button onClick={onReturn} className="flex items-center space-x-2 md:space-x-3 text-[10px] md:text-xs font-black uppercase tracking-[0.3em] text-zinc-500 hover:text-white transition-colors group">
                         <ArrowLeft className="w-4 h-4 md:w-5 md:h-5 transition-transform group-hover:-translate-x-1" />
                         <span>Term_Exit</span>
@@ -142,8 +147,10 @@ const IncidentRoomView: React.FC<IncidentRoomViewProps> = ({ report, onReturn, h
             </nav>
 
             <main className="flex-grow grid grid-cols-1 lg:grid-cols-12 overflow-visible relative h-full">
+                {/* SIDEBAR: CASE DATA & FORENSICS */}
                 <div className={`transition-all duration-500 flex flex-col ${isSidebarCollapsed ? 'lg:col-span-0 opacity-0 w-0 pointer-events-none' : 'lg:col-span-4 border-r-4 border-zinc-800 bg-zinc-900/20 opacity-100'}`}>
                     <div className="flex-grow overflow-y-auto custom-scrollbar p-6 md:p-10 space-y-8 md:space-y-12 h-full">
+                        {/* CASE METADATA SECTION */}
                         <section className="space-y-6">
                             <h3 className="text-[10px] font-black uppercase text-cyan-500 tracking-[0.4em] flex items-center space-x-3">
                                 <Database className="w-4 h-4 text-cyan-500" />
@@ -157,6 +164,7 @@ const IncidentRoomView: React.FC<IncidentRoomViewProps> = ({ report, onReturn, h
                             </div>
                         </section>
 
+                        {/* MAP SECTION - Replaced overlays and cleared central view */}
                         <section className="space-y-8">
                             <div className={`p-6 md:p-8 rounded-[2.5rem] md:rounded-[3.5rem] border-4 transition-all duration-1000 flex flex-col items-center space-y-6 md:space-y-10 relative ${isBeaconActive ? 'bg-rose-950/20 border-rose-500 shadow-[0_0_50px_rgba(244,63,94,0.1)]' : 'bg-zinc-950 border-zinc-800 shadow-2xl'}`}>
                                 <div className="relative group/map w-full overflow-hidden rounded-[2rem] md:rounded-[2.5rem] border-4 border-zinc-900 bg-black shadow-4xl aspect-video">
@@ -225,9 +233,10 @@ const IncidentRoomView: React.FC<IncidentRoomViewProps> = ({ report, onReturn, h
                     </div>
                 </div>
 
+                {/* MAIN CHAT AREA */}
                 <div className={`transition-all duration-500 bg-black flex flex-col relative ${isSidebarCollapsed ? 'lg:col-span-12' : 'lg:col-span-8'}`}>
                     <div className="flex-grow flex flex-col min-h-[600px] border-l-4 border-zinc-900 shadow-[inset_20px_0_60px_rgba(0,0,0,0.8)] h-full overflow-hidden">
-                        <MissionChatroom missionId={report.id} messages={roomMessages} onSendMessage={onSendMessage} hero={hero} />
+                        <MissionChatroom missionId={report.id} messages={messages} onSendMessage={onSendMessage} hero={hero} />
                     </div>
                 </div>
             </main>

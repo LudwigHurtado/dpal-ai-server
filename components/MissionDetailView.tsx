@@ -149,13 +149,12 @@ const MissionDetailView: React.FC<MissionDetailViewProps> = ({ mission, onReturn
         }
     };
 
-    /** FIX: Changed 'component' to 'render' for all missionPanels to match WorkspacePanel requirement */
     const missionPanels = [
         {
             id: 'missionRail',
             title: 'Operation_Path',
-            render: (ctx: any) => (
-                <PanelShell {...ctx} id="missionRail" title="Operation_Path">
+            component: (
+                <PanelShell id="missionRail" title="Operation_Path">
                     <div className="p-6 space-y-10 relative">
                         <div className="absolute left-[43px] top-10 bottom-10 w-0.5 bg-zinc-800"></div>
                         {actions.map((action, idx) => {
@@ -190,8 +189,8 @@ const MissionDetailView: React.FC<MissionDetailViewProps> = ({ mission, onReturn
         {
             id: 'actionPanel',
             title: 'Field_Operator_Directive',
-            render: (ctx: any) => (
-                <PanelShell {...ctx} id="actionPanel" title="Field_Operator_Directive">
+            component: (
+                <PanelShell id="actionPanel" title="Field_Operator_Directive">
                     <div className="p-8 space-y-8">
                         <div className="flex items-center space-x-4">
                             <div className={`p-4 rounded-2xl border-2 ${isViewingActiveAction ? 'bg-cyan-500/10 border-cyan-500' : 'bg-zinc-900 border-zinc-800'}`}>
@@ -232,8 +231,8 @@ const MissionDetailView: React.FC<MissionDetailViewProps> = ({ mission, onReturn
         {
             id: 'evidencePanel',
             title: 'Evidence_Locker',
-            render: (ctx: any) => (
-                <PanelShell {...ctx} id="evidencePanel" title="Evidence_Locker">
+            component: (
+                <PanelShell id="evidencePanel" title="Evidence_Locker">
                     <div className="p-6 space-y-6">
                          <div className="aspect-square bg-zinc-950 border-2 border-dashed border-zinc-800 rounded-3xl flex flex-col items-center justify-center p-8 text-center group hover:border-cyan-500 transition-all cursor-pointer">
                             <Camera className="w-10 h-10 text-zinc-800 group-hover:text-cyan-500 mb-4 transition-colors" />
@@ -251,8 +250,8 @@ const MissionDetailView: React.FC<MissionDetailViewProps> = ({ mission, onReturn
         {
             id: 'chroniclePanel',
             title: 'Mission_Chronicle',
-            render: (ctx: any) => (
-                <PanelShell {...ctx} id="chroniclePanel" title="Mission_Chronicle">
+            component: (
+                <PanelShell id="chroniclePanel" title="Mission_Chronicle">
                     <div className="p-6 space-y-4">
                         {operationLog.map((log, i) => (
                             <div key={i} className={`p-4 rounded-xl border-l-2 text-[9px] font-bold leading-relaxed ${
@@ -273,8 +272,8 @@ const MissionDetailView: React.FC<MissionDetailViewProps> = ({ mission, onReturn
         {
             id: 'mapPanel',
             title: 'Geospatial_Overlay',
-            render: (ctx: any) => (
-                <PanelShell {...ctx} id="mapPanel" title="Geospatial_Overlay">
+            component: (
+                <PanelShell id="mapPanel" title="Geospatial_Overlay">
                     <div className="w-full h-full bg-zinc-950 flex flex-col items-center justify-center text-zinc-800">
                         <MapIcon className="w-12 h-12 mb-4 animate-pulse opacity-20" />
                         <p className="text-[10px] font-black uppercase tracking-[0.5em] opacity-20">Scanning_Local_Node...</p>

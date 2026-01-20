@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Maximize2, Minimize2, ChevronDown, ChevronUp, GripVertical, X } from '../icons';
+import { Maximize2, Minimize2, ChevronDown, ChevronUp, GripVertical, X, MoreVertical } from '../icons';
 
 interface PanelShellProps {
   id: string;
@@ -38,8 +38,8 @@ const PanelShell: React.FC<PanelShellProps> = ({
       {/* Panel Header */}
       <div 
         className={`flex items-center justify-between px-5 py-3 border-b border-zinc-800 bg-zinc-950/50 flex-shrink-0 select-none ${
-          isEditMode ? 'cursor-grab active:cursor-grabbing panel-drag-handle' : ''
-        }`}
+          isEditMode ? 'cursor-grab active:cursor-grabbing' : ''
+        } panel-drag-handle`}
       >
         <div className="flex items-center space-x-3 truncate">
           {isEditMode && <GripVertical className="w-4 h-4 text-zinc-600 flex-shrink-0" />}

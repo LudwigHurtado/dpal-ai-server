@@ -2,42 +2,21 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { Report } from '../types';
 import { useTranslations } from '../i18n';
+/* FIX: Added missing Star icon import */
 import { ArrowLeft, Coins, Zap, Check, Loader, QrCode, ShieldCheck, Activity, Target, Database, Hash, Sparkles, Scale, Broadcast, Printer, FileText, Globe, User, Clock, ChevronDown, CheckCircle, Send, Package, ArrowRight, Mail, Monitor, FileCode, Star } from './icons';
-import html2canvas from "html2canvas";
-import jsPDF from "jspdf";
+import NftCard from './NftCard';
 
 interface ReportCompleteViewProps {
     report: Report;
     onReturn: () => void;
     onEnterSituationRoom?: (report: Report) => void;
-    onCertificateReady?: (reportId: string, pdfDataUrl: string) => void;
 }
 
-const blobToDataUrl = (blob: Blob) =>
-  new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(String(reader.result));
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-
-const downloadBlob = (blob: Blob, filename: string) => {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-};
-
-const ReportCompleteView: React.FC<ReportCompleteViewProps> = ({ report, onReturn, onEnterSituationRoom, onCertificateReady }) => {
+const ReportCompleteView: React.FC<ReportCompleteViewProps> = ({ report, onReturn, onEnterSituationRoom }) => {
     const { t } = useTranslations();
     const [verificationStep, setVerificationStep] = useState(0);
     const [showTechnical, setShowTechnical] = useState(false);
     const [dispatchStatus, setDispatchStatus] = useState<'IDLE' | 'SENDING' | 'SUCCESS'>('IDLE');
-    const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
     const certificateRef = useRef<HTMLDivElement>(null);
     
     const logs = [
@@ -49,39 +28,6 @@ const ReportCompleteView: React.FC<ReportCompleteViewProps> = ({ report, onRetur
         "SHARD_SEALED_WITH_AUTHORITY_KEY"
     ];
 
-    const buildCertificatePdf = async (): Promise<Blob> => {
-        if (!certificateRef.current) throw new Error("Missing certificateRef");
-
-        const canvas = await html2canvas(certificateRef.current, {
-            scale: 2,
-            backgroundColor: "#ffffff",
-            useCORS: true
-        });
-
-        const imgData = canvas.toDataURL("image/png");
-        const pdf = new jsPDF("p", "pt", "letter");
-        const pageWidth = pdf.internal.pageSize.getWidth();
-        const pageHeight = pdf.internal.pageSize.getHeight();
-
-        const imgWidth = pageWidth;
-        const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-        let y = 0;
-        pdf.addImage(imgData, "PNG", 0, y, imgWidth, imgHeight, undefined, "FAST");
-
-        if (imgHeight > pageHeight) {
-            let remaining = imgHeight;
-            while (remaining > pageHeight) {
-                remaining -= pageHeight;
-                y -= pageHeight;
-                pdf.addPage();
-                pdf.addImage(imgData, "PNG", 0, y, imgWidth, imgHeight, undefined, "FAST");
-            }
-        }
-
-        return pdf.output("blob");
-    };
-
     useEffect(() => {
         const interval = setInterval(() => {
             setVerificationStep(prev => (prev < logs.length ? prev + 1 : prev));
@@ -89,44 +35,33 @@ const ReportCompleteView: React.FC<ReportCompleteViewProps> = ({ report, onRetur
         return () => clearInterval(interval);
     }, [logs.length]);
 
-    useEffect(() => {
-        if (!onCertificateReady) return;
-        if ((report as any).certificatePdfDataUrl) return;
-
-        let cancelled = false;
-        (async () => {
-            try {
-                // Wait for the verification log animation to finish slightly
-                await new Promise(r => setTimeout(r, 1000));
-                setIsGeneratingPdf(true);
-                const blob = await buildCertificatePdf();
-                if (cancelled) return;
-                const pdfDataUrl = await blobToDataUrl(blob);
-                if (cancelled) return;
-                onCertificateReady(report.id, pdfDataUrl);
-            } catch (e) {
-                console.error("Auto-PDF fail:", e);
-            } finally {
-                if (!cancelled) setIsGeneratingPdf(false);
-            }
-        })();
-
-        return () => { cancelled = true; };
-    }, [report.id]);
-
     const handlePrint = () => {
         window.print();
     };
 
-    const handleDownloadPdf = async () => {
+    const handleShare = async () => {
+        const shareData = {
+            title: `DPAL Certified Report: ${report.title}`,
+            text: `View this certified accountability record on the DPAL ledger: ${report.description}`,
+            url: window.location.href,
+        };
         try {
-            setIsGeneratingPdf(true);
-            const blob = await buildCertificatePdf();
-            const filename = `DPAL-CERT-${report.id}.pdf`;
-            downloadBlob(blob, filename);
-        } finally {
-            setIsGeneratingPdf(false);
+            if (navigator.share) {
+                await navigator.share(shareData);
+            } else {
+                handleCopyLink();
+            }
+        } catch (err) {
+            console.error(err);
         }
+    };
+
+    const handleAgencyDispatch = () => {
+        setDispatchStatus('SENDING');
+        setTimeout(() => {
+            setDispatchStatus('SUCCESS');
+            setTimeout(() => setDispatchStatus('IDLE'), 3000);
+        }, 2000);
     };
 
     const handleEmail = () => {
@@ -143,7 +78,7 @@ const ReportCompleteView: React.FC<ReportCompleteViewProps> = ({ report, onRetur
     };
 
     const baseUrl = window.location.origin;
-    const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=420x420&data=${encodeURIComponent(`${baseUrl}?reportId=${report.id}`)}&bgcolor=ffffff&color=000000&margin=10`;
+    const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(`${baseUrl}?reportId=${report.id}`)}&bgcolor=ffffff&color=000000&margin=10`;
 
     if (report.isGeneratingNft) {
         return (
@@ -161,7 +96,7 @@ const ReportCompleteView: React.FC<ReportCompleteViewProps> = ({ report, onRetur
     }
 
     return (
-        <div className="relative min-h-screen bg-black font-mono overflow-x-hidden pb-40">
+        <div className="relative min-h-screen bg-black font-mono overflow-x-hidden pb-32">
             <style>{`
                 @media print {
                     @page { size: A4; margin: 0; }
@@ -180,9 +115,8 @@ const ReportCompleteView: React.FC<ReportCompleteViewProps> = ({ report, onRetur
                         color: black !important; 
                         margin: 0 !important; 
                         padding: 60px !important;
-                        width: 210mm !important; 
-                        min-height: 297mm !important; 
-                        height: auto !important;
+                        height: 100vh !important;
+                        width: 100% !important;
                         display: flex !important;
                         flex-direction: column !important;
                     }
@@ -199,25 +133,6 @@ const ReportCompleteView: React.FC<ReportCompleteViewProps> = ({ report, onRetur
                 .shadow-4xl { box-shadow: 0 40px 100px rgba(0,0,0,0.8); }
                 .seal-ripple { animation: ripple 4s ease-in-out infinite; }
                 @keyframes ripple { 0% { transform: scale(1); opacity: 0.1; } 50% { transform: scale(1.1); opacity: 0.2; } 100% { transform: scale(1); opacity: 0.1; } }
-
-                .qr-img {
-                    width: 220px;
-                    height: 220px;
-                    aspect-ratio: 1 / 1;
-                    object-fit: contain;
-                    image-rendering: pixelated;
-                }
-
-                @media (max-width: 480px) {
-                    .qr-img { width: 180px; height: 180px; }
-                }
-
-                @media print {
-                    .qr-img {
-                        width: 220px !important;
-                        height: 220px !important;
-                    }
-                }
             `}</style>
 
             <div className="max-w-6xl mx-auto px-4 pt-12 no-print">
@@ -275,22 +190,16 @@ const ReportCompleteView: React.FC<ReportCompleteViewProps> = ({ report, onRetur
                                     <Printer className="w-8 h-8 text-zinc-600 group-hover:text-white mb-3 transition-colors" />
                                     <span className="text-[10px] font-black uppercase text-zinc-500 group-hover:text-white">Print_Hardcopy</span>
                                 </button>
-                                <button 
-                                    onClick={handleDownloadPdf} 
-                                    disabled={isGeneratingPdf}
-                                    className="flex flex-col items-center justify-center p-6 bg-zinc-900 border border-zinc-800 rounded-3xl hover:border-cyan-500 transition-all group active:scale-95 disabled:opacity-50"
-                                >
+                                <button onClick={handlePrint} className="flex flex-col items-center justify-center p-6 bg-zinc-900 border border-zinc-800 rounded-3xl hover:border-cyan-500 transition-all group active:scale-95">
                                     <FileCode className="w-8 h-8 text-cyan-600 group-hover:text-white mb-3 transition-colors" />
-                                    <span className="text-[10px] font-black uppercase text-zinc-500 group-hover:text-white">
-                                        {isGeneratingPdf ? "Syncing..." : "Download_PDF"}
-                                    </span>
+                                    <span className="text-[10px] font-black uppercase text-zinc-500 group-hover:text-white">Download_PDF</span>
                                 </button>
                                 <button onClick={handleEmail} className="flex flex-col items-center justify-center p-6 bg-zinc-900 border border-zinc-800 rounded-3xl hover:border-cyan-500 transition-all group active:scale-95">
                                     <Mail className="w-8 h-8 text-zinc-600 group-hover:text-white mb-3 transition-colors" />
                                     <span className="text-[10px] font-black uppercase text-zinc-500 group-hover:text-white">Email_Dispatch</span>
                                 </button>
                                 <button 
-                                    onClick={() => setDispatchStatus('SENDING')}
+                                    onClick={handleAgencyDispatch}
                                     disabled={dispatchStatus !== 'IDLE'}
                                     className={`flex flex-col items-center justify-center p-6 border rounded-3xl transition-all group active:scale-95 ${dispatchStatus === 'SUCCESS' ? 'bg-emerald-950/20 border-emerald-500 text-emerald-400' : 'bg-rose-950/20 border-rose-900 hover:border-rose-500 text-rose-500'}`}
                                 >
@@ -306,9 +215,11 @@ const ReportCompleteView: React.FC<ReportCompleteViewProps> = ({ report, onRetur
             {/* THE FORMAL CERTIFICATE - PRINT AREA */}
             <div className="print-area max-w-5xl mx-auto px-4 md:px-0">
                 <div ref={certificateRef} className="certificate-frame bg-white text-zinc-950 border-[20px] border-double border-zinc-900 rounded-none shadow-4xl p-10 md:p-24 flex flex-col min-h-[1050px] relative overflow-hidden">
+                    {/* Decorative Background Elements */}
                     <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] bg-[length:24px_24px] opacity-10 no-print"></div>
                     <div className="absolute top-0 right-0 w-96 h-96 bg-zinc-50 rounded-full -mr-48 -mt-48 opacity-20 no-print"></div>
                     
+                    {/* A. Certificate Header */}
                     <header className="border-b-[6px] border-zinc-900 pb-12 mb-16 flex flex-col md:flex-row justify-between items-center gap-10 relative z-10">
                         <div className="flex items-center space-x-8">
                              <div className="w-24 h-24 bg-zinc-950 flex items-center justify-center rounded-[2rem] shadow-xl">
@@ -329,6 +240,7 @@ const ReportCompleteView: React.FC<ReportCompleteViewProps> = ({ report, onRetur
 
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-20 flex-grow relative z-10">
                         <div className="md:col-span-8 space-y-16">
+                            {/* B. Record Identification */}
                             <section>
                                 <h3 className="text-[11px] font-black uppercase tracking-[0.5em] text-zinc-400 mb-8 flex items-center gap-4">
                                     <Target className="w-5 h-5 text-zinc-950"/> <span>{t('reportComplete.recordId')}</span>
@@ -341,6 +253,7 @@ const ReportCompleteView: React.FC<ReportCompleteViewProps> = ({ report, onRetur
                                 </div>
                             </section>
 
+                            {/* C. Verification & Integrity */}
                             <section>
                                 <h3 className="text-[11px] font-black uppercase tracking-[0.5em] text-zinc-400 mb-8 flex items-center gap-4">
                                     <Hash className="w-5 h-5 text-zinc-950"/> <span>{t('reportComplete.integritySection')}</span>
@@ -353,33 +266,33 @@ const ReportCompleteView: React.FC<ReportCompleteViewProps> = ({ report, onRetur
                                 </div>
                             </section>
 
-                            <section className="pt-4 grid grid-cols-2 gap-12">
+                            {/* D. Signature Section */}
+                            <section className="pt-8 grid grid-cols-2 gap-16">
                                 <div className="space-y-4">
                                     <p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">ORACLE_VERIFICATION_SIG</p>
-                                    <div className="mt-10">
-                                        <div className="h-[2px] w-full bg-zinc-200"></div>
-                                        <div className="pt-3 font-sans text-sm font-bold text-zinc-800 uppercase tracking-wide">DPAL Network Guardian</div>
+                                    <div className="h-[2px] w-full bg-zinc-200 mt-12 relative">
+                                        <div className="absolute -top-12 left-0 italic font-serif text-2xl text-zinc-800 opacity-60">DPAL_Network_Guardian</div>
                                     </div>
                                     <p className="text-[8px] font-black text-zinc-500 uppercase tracking-widest">Network Controller: RSA-4096</p>
                                 </div>
                                 <div className="space-y-4">
                                     <p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">CERTIFIED_BY</p>
-                                    <div className="mt-10">
-                                        <div className="h-[2px] w-full bg-zinc-200"></div>
-                                        <div className="pt-3 font-sans text-sm font-bold text-zinc-800 uppercase tracking-wide">Gemini Oracle</div>
+                                    <div className="h-[2px] w-full bg-zinc-200 mt-12 relative">
+                                         <div className="absolute -top-12 left-0 italic font-serif text-2xl text-zinc-800 opacity-60">GEMINI_3_ORACLE</div>
                                     </div>
                                     <p className="text-[8px] font-black text-zinc-500 uppercase tracking-widest">Automated Consensus Node</p>
                                 </div>
                             </section>
                         </div>
 
+                        {/* E. Sidebar: QR & Official Seal */}
                         <div className="md:col-span-4 flex flex-col items-center justify-between py-4">
                             <div className="bg-white border-2 border-zinc-100 p-10 rounded-[3.5rem] text-center space-y-8 shadow-xl relative w-full overflow-hidden">
                                 <div className="absolute inset-0 bg-[radial-gradient(#000_1px,transparent_1px)] bg-[length:12px_12px] opacity-[0.03]"></div>
                                 <div className="space-y-4 relative z-10">
                                     <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">{t('reportComplete.qrLabel')}</p>
                                     <div className="bg-white p-6 rounded-[2rem] inline-block shadow-inner border border-zinc-100">
-                                        <img src={qrImageUrl} alt="Entry QR" className="qr-img" loading="eager" />
+                                        <img src={qrImageUrl} alt="Entry QR" className="w-48 h-48" />
                                     </div>
                                 </div>
                                 <p className="text-[10px] text-zinc-500 font-bold uppercase leading-relaxed px-6 relative z-10">
@@ -387,6 +300,7 @@ const ReportCompleteView: React.FC<ReportCompleteViewProps> = ({ report, onRetur
                                 </p>
                             </div>
 
+                            {/* OFFICIAL SEAL VISUAL */}
                             <div className="relative mt-20 no-print lg:block hidden">
                                 <div className="absolute inset-0 seal-ripple bg-zinc-900/5 rounded-full scale-[2]"></div>
                                 <div className="relative w-40 h-40 border-[8px] border-zinc-900 rounded-full flex flex-col items-center justify-center p-4">
@@ -410,7 +324,7 @@ const ReportCompleteView: React.FC<ReportCompleteViewProps> = ({ report, onRetur
             </div>
 
             {/* BUTTON SET - FOOTER */}
-            <div className="no-print fixed bottom-0 left-0 w-full bg-zinc-950/80 backdrop-blur-xl border-t border-zinc-800 p-8 z-[100] pb-[env(safe-area-inset-bottom)]">
+            <div className="no-print fixed bottom-0 left-0 w-full bg-zinc-950/80 backdrop-blur-xl border-t border-zinc-800 p-8 z-[100]">
                 <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-8">
                     <div className="flex items-center gap-6 w-full md:w-auto">
                         <button 
@@ -421,12 +335,11 @@ const ReportCompleteView: React.FC<ReportCompleteViewProps> = ({ report, onRetur
                             <span>{t('reportComplete.printCert')}</span>
                         </button>
                         <button 
-                            onClick={handleDownloadPdf}
-                            disabled={isGeneratingPdf}
-                            className="flex-1 md:flex-none flex items-center justify-center space-x-4 bg-cyan-600 hover:bg-cyan-500 text-white font-black py-5 px-12 rounded-[1.5rem] text-xs uppercase tracking-widest shadow-2xl active:scale-95 transition-all border-b-4 border-cyan-800 disabled:opacity-50"
+                            onClick={handlePrint}
+                            className="flex-1 md:flex-none flex items-center justify-center space-x-4 bg-cyan-600 hover:bg-cyan-500 text-white font-black py-5 px-12 rounded-[1.5rem] text-xs uppercase tracking-widest shadow-2xl active:scale-95 transition-all border-b-4 border-cyan-800"
                         >
                             <FileCode className="w-6 h-6" />
-                            <span>{isGeneratingPdf ? "Syncing..." : "Download_Secure_PDF"}</span>
+                            <span>Download_Secure_PDF</span>
                         </button>
                     </div>
 
@@ -481,6 +394,15 @@ const ReportCompleteView: React.FC<ReportCompleteViewProps> = ({ report, onRetur
         </div>
     );
 };
+
+const NextStepItem: React.FC<{ num: string; text: string }> = ({ num, text }) => (
+    <li className="flex items-start space-x-4 group">
+        <span className="text-[10px] font-black text-cyan-500 bg-cyan-950/30 px-2 py-1 rounded border border-cyan-800/40">{num}</span>
+        <p className="text-xs text-zinc-400 font-bold uppercase leading-relaxed tracking-widest transition-colors group-hover:text-zinc-200">
+            {text}
+        </p>
+    </li>
+);
 
 const DataRow: React.FC<{ label: string; value: string; color?: string }> = ({ label, value, color = "text-zinc-950" }) => (
     <div className="flex flex-col gap-2">

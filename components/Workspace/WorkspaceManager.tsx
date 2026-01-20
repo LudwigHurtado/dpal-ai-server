@@ -1,24 +1,14 @@
 
-import React, { useState, useEffect } from 'react';
-import { Responsive, Layout } from 'react-grid-layout';
-// @ts-ignore - WidthProvider is a named export of react-grid-layout but may not be recognized in all TypeScript configurations
-import { WidthProvider } from 'react-grid-layout';
-import { RefreshCw, Layout as LayoutIcon, Lock, Unlock, Minimize2 } from '../icons';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Responsive, WidthProvider, Layout } from 'react-grid-layout';
+import { RefreshCw, Layout as LayoutIcon, Lock, Unlock, Zap, Activity } from '../icons';
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
-
-export interface PanelContext {
-  isEditMode: boolean;
-  isFocused: boolean;
-  isCollapsed: boolean;
-  onToggleFocus: () => void;
-  onToggleCollapse: () => void;
-}
 
 interface WorkspacePanel {
   id: string;
   title: string;
-  render: (ctx: PanelContext) => React.ReactNode;
+  component: React.ReactNode;
   minW?: number;
   minH?: number;
 }
@@ -26,12 +16,11 @@ interface WorkspacePanel {
 interface WorkspaceManagerProps {
   screenId: string;
   panels: WorkspacePanel[];
-  /** FIX: Corrected defaultLayouts type. Layout is already an array (LayoutItem[]), so Layout[] would be a 2D array, causing type errors in consuming components. */
-  defaultLayouts: { lg: Layout; md: Layout };
+  defaultLayouts: { lg: Layout[], md: Layout[] };
   mobileTabs: { id: string, label: string, icon: React.ReactNode }[];
 }
 
-const LAYOUT_VERSION = "1.1.0";
+const LAYOUT_VERSION = "1.0.0";
 
 const WorkspaceManager: React.FC<WorkspaceManagerProps> = ({
   screenId,
@@ -39,8 +28,7 @@ const WorkspaceManager: React.FC<WorkspaceManagerProps> = ({
   defaultLayouts,
   mobileTabs
 }) => {
-  /** FIX: Defined layouts state with the corrected type to match defaultLayouts. */
-  const [layouts, setLayouts] = useState<{ [key: string]: Layout }>(() => {
+  const [layouts, setLayouts] = useState(() => {
     const saved = localStorage.getItem(`dpal-layout-${screenId}`);
     if (saved) {
       try {
@@ -56,7 +44,6 @@ const WorkspaceManager: React.FC<WorkspaceManagerProps> = ({
   const [isEditMode, setIsEditMode] = useState(false);
   const [activeMobileTab, setActiveMobileTab] = useState(mobileTabs[0].id);
   const [focusedPanel, setFocusedPanel] = useState<string | null>(null);
-  const [collapsedPanels, setCollapsedPanels] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     localStorage.setItem(`dpal-layout-${screenId}`, JSON.stringify({
@@ -65,33 +52,30 @@ const WorkspaceManager: React.FC<WorkspaceManagerProps> = ({
     }));
   }, [layouts, screenId]);
 
-  /** FIX: Updated onLayoutChange parameters to match the expected signature from ResponsiveGridLayout. */
-  const onLayoutChange = (currentLayout: Layout, allLayouts: { [key: string]: Layout }) => {
+  const onLayoutChange = (currentLayout: Layout[], allLayouts: { [key: string]: Layout[] }) => {
     setLayouts(allLayouts);
   };
 
   const resetLayout = () => {
     if (confirm("Reset current workspace calibration?")) {
       setLayouts(defaultLayouts);
-      setCollapsedPanels({});
-      setFocusedPanel(null);
     }
   };
 
   const toggleFocus = (panelId: string) => {
-    setFocusedPanel(prev => prev === panelId ? null : panelId);
+    setFocusedPanel(focusedPanel === panelId ? null : panelId);
   };
 
-  const toggleCollapse = (panelId: string) => {
-    setCollapsedPanels(prev => ({
-      ...prev,
-      [panelId]: !prev[panelId]
-    }));
-  };
+  const currentPanels = useMemo(() => {
+    if (focusedPanel) {
+      return panels.filter(p => p.id === focusedPanel);
+    }
+    return panels;
+  }, [panels, focusedPanel]);
 
   return (
-    <div className="relative flex flex-col h-full w-full font-mono text-zinc-100">
-      {/* Workspace Controls Header - Visible on md+ */}
+    <div className="relative flex flex-col h-full w-full font-mono">
+      {/* Workspace Controls Header */}
       <div className="flex items-center justify-between mb-4 bg-zinc-900/50 p-3 rounded-2xl border border-zinc-800 no-print">
         <div className="flex items-center space-x-6">
           <div className="flex items-center space-x-3 px-4 py-1.5 bg-black/60 rounded-xl border border-zinc-800">
@@ -99,7 +83,7 @@ const WorkspaceManager: React.FC<WorkspaceManagerProps> = ({
              <span className="text-[10px] font-black uppercase tracking-widest text-white">Terminal_Workspace</span>
           </div>
           
-          <div className="hidden md:flex items-center space-x-4">
+          <div className="hidden lg:flex items-center space-x-4">
             <button 
               onClick={() => setIsEditMode(!isEditMode)}
               className={`flex items-center space-x-2 px-4 py-1.5 rounded-xl border-2 transition-all text-[9px] font-black uppercase tracking-widest ${
@@ -120,15 +104,6 @@ const WorkspaceManager: React.FC<WorkspaceManagerProps> = ({
         </div>
 
         <div className="flex items-center space-x-2">
-            {focusedPanel && (
-                <button 
-                    onClick={() => setFocusedPanel(null)}
-                    className="flex items-center space-x-2 px-3 py-1 bg-rose-950/20 border border-rose-900/30 rounded-lg text-rose-500 hover:bg-rose-900/30 transition-all"
-                >
-                    <Minimize2 className="w-3 h-3" />
-                    <span className="text-[8px] font-black uppercase">Exit_Focus</span>
-                </button>
-            )}
             <div className="flex items-center space-x-2 px-3 py-1 bg-emerald-950/20 border border-emerald-900/30 rounded-lg">
                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
                 <span className="text-[8px] font-black uppercase text-emerald-500 tracking-widest">Workspace: Stable</span>
@@ -139,15 +114,9 @@ const WorkspaceManager: React.FC<WorkspaceManagerProps> = ({
       {/* Grid Display */}
       <div className="flex-grow relative overflow-hidden">
         {/* Mobile Tabbed View (Breakpoint sm) */}
-        <div className="block md:hidden h-full flex flex-col">
+        <div className="block lg:hidden h-full flex flex-col">
             <div className="flex-grow overflow-y-auto mb-20">
-                {panels.find(p => p.id === activeMobileTab)?.render({
-                    isEditMode: false,
-                    isFocused: false,
-                    isCollapsed: false,
-                    onToggleFocus: () => {},
-                    onToggleCollapse: () => {}
-                })}
+                {panels.find(p => p.id === activeMobileTab)?.component}
             </div>
             {/* Fixed Mobile Tab Bar */}
             <div className="fixed bottom-0 left-0 right-0 bg-zinc-950/95 backdrop-blur-xl border-t border-zinc-800 p-2 flex justify-around z-[100] sm:px-12">
@@ -159,31 +128,25 @@ const WorkspaceManager: React.FC<WorkspaceManagerProps> = ({
                             activeMobileTab === tab.id ? 'text-cyan-400 bg-cyan-500/10' : 'text-zinc-600'
                         }`}
                     >
-                        {React.isValidElement(tab.icon) && React.cloneElement(tab.icon as React.ReactElement<{className?: string}>, { className: "w-5 h-5 mb-1" })}
+                        {React.cloneElement(tab.icon as React.ReactElement, { className: "w-5 h-5 mb-1" })}
                         <span className="text-[8px] font-black uppercase tracking-tighter">{tab.label}</span>
                     </button>
                 ))}
             </div>
         </div>
 
-        {/* Desktop/Tablet Grid View - Active on md+ */}
-        <div className="hidden md:block h-full overflow-y-auto overflow-x-hidden custom-scrollbar">
+        {/* Desktop/Tablet Grid View */}
+        <div className="hidden lg:block h-full overflow-y-auto overflow-x-hidden custom-scrollbar">
           {focusedPanel ? (
               <div className="h-full w-full p-2">
-                  {panels.find(p => p.id === focusedPanel)?.render({
-                      isEditMode: false,
-                      isFocused: true,
-                      isCollapsed: false,
-                      onToggleFocus: () => toggleFocus(focusedPanel),
-                      onToggleCollapse: () => {}
-                  })}
+                  {panels.find(p => p.id === focusedPanel)?.component}
               </div>
           ) : (
             <ResponsiveGridLayout
               className="layout"
               layouts={layouts}
-              breakpoints={{ lg: 1200, md: 768, sm: 480 }}
-              cols={{ lg: 12, md: 6, sm: 2 }}
+              breakpoints={{ lg: 1200, md: 768 }}
+              cols={{ lg: 12, md: 6 }}
               rowHeight={24}
               draggableHandle=".panel-drag-handle"
               isDraggable={isEditMode}
@@ -194,13 +157,7 @@ const WorkspaceManager: React.FC<WorkspaceManagerProps> = ({
             >
               {panels.map(panel => (
                 <div key={panel.id}>
-                  {panel.render({
-                      isEditMode,
-                      isFocused: false,
-                      isCollapsed: !!collapsedPanels[panel.id],
-                      onToggleFocus: () => toggleFocus(panel.id),
-                      onToggleCollapse: () => toggleCollapse(panel.id)
-                  })}
+                  {panel.component}
                 </div>
               ))}
             </ResponsiveGridLayout>
@@ -209,7 +166,7 @@ const WorkspaceManager: React.FC<WorkspaceManagerProps> = ({
       </div>
 
       {isEditMode && (
-          <div className="fixed bottom-10 right-10 z-[200] animate-bounce pointer-events-none">
+          <div className="fixed bottom-10 right-10 z-[200] animate-bounce">
               <div className="bg-cyan-600 text-white px-6 py-3 rounded-full font-black text-xs uppercase tracking-widest shadow-2xl flex items-center space-x-3">
                   <Unlock className="w-4 h-4" />
                   <span>Layout Editing Active</span>

@@ -41,20 +41,9 @@ const CategorySelectionView: React.FC<CategorySelectionViewProps> = ({ onSelectC
         );
     }, [searchQuery, t]);
 
-    const handleSelectCategory = (cat: Category) => {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-        onSelectCategory(cat);
-    };
-
-    const handleSelectMissions = (cat: Category) => {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-        onSelectMissions(cat);
-    };
-
     return (
         <div className="animate-fade-in font-mono text-white max-w-7xl mx-auto px-4 pb-20">
             <button
-                type="button"
                 onClick={onReturnToHub}
                 className="inline-flex items-center space-x-3 text-[10px] font-black uppercase tracking-[0.3em] text-zinc-500 hover:text-cyan-400 transition-colors mb-12 group"
             >
@@ -83,7 +72,6 @@ const CategorySelectionView: React.FC<CategorySelectionViewProps> = ({ onSelectC
                     />
                     {searchQuery && (
                         <button 
-                            type="button"
                             onClick={() => setSearchQuery('')}
                             className="absolute inset-y-0 right-6 flex items-center text-zinc-600 hover:text-rose-500 transition-colors"
                         >
@@ -114,16 +102,14 @@ const CategorySelectionView: React.FC<CategorySelectionViewProps> = ({ onSelectC
 
                             <div className="mt-auto space-y-3 relative z-10">
                                  <button
-                                    type="button"
-                                    onClick={() => handleSelectCategory(cat.value)}
+                                    onClick={() => onSelectCategory(cat.value)}
                                     className="w-full flex items-center justify-center space-x-3 bg-white text-black font-black py-4 px-4 rounded-2xl hover:bg-zinc-200 transition-all uppercase text-[10px] tracking-widest shadow-lg"
                                 >
                                     <Megaphone className="w-4 h-4" />
                                     <span>File_Report</span>
                                 </button>
                                 <button
-                                    type="button"
-                                    onClick={() => handleSelectMissions(cat.value)}
+                                    onClick={() => onSelectMissions(cat.value)}
                                     className="w-full flex items-center justify-center space-x-3 bg-cyan-600 text-white font-black py-4 px-4 rounded-2xl hover:bg-cyan-500 transition-all uppercase text-[10px] tracking-widest shadow-lg"
                                 >
                                     <Zap className="w-4 h-4 fill-current" />
@@ -143,7 +129,6 @@ const CategorySelectionView: React.FC<CategorySelectionViewProps> = ({ onSelectC
                         <p className="text-zinc-600 text-xs font-bold uppercase tracking-widest mt-2">No categories matching "{searchQuery}" in local blocks.</p>
                     </div>
                     <button 
-                        type="button"
                         onClick={() => setSearchQuery('')}
                         className="px-10 py-4 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
                     >

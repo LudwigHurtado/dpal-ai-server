@@ -98,7 +98,6 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, onAnalyz
           {/* PRIMARY ACTION: ADD NEW REPORT */}
           {onAddNewReport && (
             <button 
-                type="button"
                 onClick={onAddNewReport}
                 className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-black py-6 rounded-2xl flex flex-col items-center justify-center space-y-2 transition-all active:scale-95 shadow-2xl button-glow-cyan group/add"
             >
@@ -169,7 +168,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, onAnalyz
           <div className="space-y-4">
             <div className="flex justify-between items-center px-2">
                 <label className="text-[10px] font-black uppercase text-zinc-500 tracking-[0.3em]">03_Sector_Triage</label>
-                <button type="button" onClick={() => setIsTriageExpanded(true)} className="text-zinc-700 hover:text-cyan-400 transition-colors">
+                <button onClick={() => setIsTriageExpanded(true)} className="text-zinc-700 hover:text-cyan-400 transition-colors">
                     <Maximize2 className="w-4 h-4" />
                 </button>
             </div>
@@ -181,7 +180,6 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, onAnalyz
                 return (
                   <button
                     key={cat.value}
-                    type="button"
                     onClick={() => setFilters(prev => ({
                         ...prev,
                         selectedCategories: isSelected ? prev.selectedCategories.filter(c => c !== cat.value) : [...prev.selectedCategories, cat.value]
@@ -204,7 +202,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, onAnalyz
           {isTriageExpanded && (
               <div className="fixed inset-0 z-[200] bg-black/90 backdrop-blur-xl flex items-center justify-center p-6 md:p-20 font-mono animate-fade-in">
                   <div className="bg-zinc-900 border-4 border-emerald-500/30 rounded-[3rem] w-full max-w-4xl p-12 relative shadow-[0_0_80px_rgba(16,185,129,0.15)] animate-scale-in">
-                        <button type="button" onClick={() => setIsTriageExpanded(false)} className="absolute top-8 right-8 p-3 bg-zinc-800 hover:bg-zinc-700 text-white rounded-full transition-all">
+                        <button onClick={() => setIsTriageExpanded(false)} className="absolute top-8 right-8 p-3 bg-zinc-800 hover:bg-zinc-700 text-white rounded-full transition-all">
                             <X className="w-6 h-6" />
                         </button>
                         <div className="space-y-10">
@@ -226,7 +224,6 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, onAnalyz
                                     return (
                                         <button
                                             key={cat.value}
-                                            type="button"
                                             onClick={() => setFilters(prev => ({
                                                 ...prev,
                                                 selectedCategories: isSelected ? prev.selectedCategories.filter(c => c !== cat.value) : [...prev.selectedCategories, cat.value]
@@ -246,8 +243,8 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, onAnalyz
                             </div>
 
                             <div className="flex gap-4">
-                                <button type="button" onClick={() => setFilters(prev => ({ ...prev, selectedCategories: [] }))} className="px-10 py-5 bg-zinc-800 rounded-2xl text-[10px] font-black uppercase text-zinc-400 hover:text-white transition-all">Clear_All</button>
-                                <button type="button" onClick={() => setIsTriageExpanded(false)} className="flex-grow bg-white text-black font-black py-5 rounded-2xl text-xs uppercase tracking-widest shadow-2xl active:scale-95 transition-all">Apply_Triage_Filters</button>
+                                <button onClick={() => setFilters(prev => ({ ...prev, selectedCategories: [] }))} className="px-10 py-5 bg-zinc-800 rounded-2xl text-[10px] font-black uppercase text-zinc-400 hover:text-white transition-all">Clear_All</button>
+                                <button onClick={() => setIsTriageExpanded(false)} className="flex-grow bg-white text-black font-black py-5 rounded-2xl text-xs uppercase tracking-widest shadow-2xl active:scale-95 transition-all">Apply_Triage_Filters</button>
                             </div>
                         </div>
                   </div>
@@ -265,7 +262,6 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, onAnalyz
                         matchingSignals.map(sig => (
                             <button 
                                 key={sig.id}
-                                type="button"
                                 onClick={() => onJoinReportChat && onJoinReportChat(sig)}
                                 className="w-full text-left bg-zinc-950 border border-zinc-800 p-4 rounded-2xl hover:border-emerald-500 transition-all group/sig relative overflow-hidden shadow-md"
                             >
@@ -292,7 +288,6 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, onAnalyz
           
           <div className="pt-6 border-t border-zinc-800 flex-shrink-0">
               <button
-                type="button"
                 onClick={onAnalyzeFeed}
                 disabled={isAnalyzing || reportCount === 0}
                 className="w-full flex items-center justify-center space-x-4 px-6 py-6 bg-zinc-900 border border-zinc-800 rounded-2xl text-xs font-black uppercase text-zinc-400 hover:text-white hover:border-purple-500/50 transition-all shadow-xl group disabled:opacity-30 active:scale-95"

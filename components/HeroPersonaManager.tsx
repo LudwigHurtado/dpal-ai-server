@@ -2,13 +2,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslations } from '../i18n';
 import { type HeroPersona, Archetype } from '../types';
-import { Loader, Check, User, Zap, ShieldCheck, Search, Eye, Sparkles, Activity, Target, Camera, X, RefreshCw, Heart, Scale, Monitor, FileText } from './icons';
-import { extractVisualDescriptors } from '../services/geminiService';
+import { Loader, Check, User, Zap, ShieldCheck, Search, Eye, Sparkles, Activity, Target, Camera, X, RefreshCw, Heart, Scale, Monitor } from './icons';
 
 interface HeroPersonaManagerProps {
     personas: HeroPersona[];
     equippedPersonaId: string | null;
-    onAddHeroPersona: (description: string, archetype: Archetype, sourceImage?: string, prop?: string, stance?: string, descriptors?: string) => Promise<void>;
+    onAddHeroPersona: (description: string, archetype: Archetype, sourceImage?: string) => Promise<void>;
     onDeletePersona: (personaId: string) => void;
     onEquipPersona: (personaId: string | null) => void;
 }
@@ -23,18 +22,6 @@ const ARCHETYPE_INFO = [
     { type: Archetype.Guide, icon: User, desc: 'Communal wisdom.', color: 'indigo', suggestion: 'Mapping the way forward' },
 ];
 
-const PROPS = [
-    { id: 'tablet', label: 'Holo_Tablet', icon: <Monitor className="w-4 h-4"/> },
-    { id: 'clipboard', label: 'Tactical_Board', icon: <FileText className="w-4 h-4"/> },
-    { id: 'camera', label: 'Body_Cam', icon: <Camera className="w-4 h-4"/> },
-];
-
-const STANCES = [
-    { id: 'calm', label: 'Calm' },
-    { id: 'alert', label: 'Alert' },
-    { id: 'thoughtful', label: 'Reflective' },
-];
-
 const MAX_PERSONAS = 5;
 
 const HeroPersonaManager: React.FC<HeroPersonaManagerProps> = ({ personas, equippedPersonaId, onAddHeroPersona, onDeletePersona, onEquipPersona }) => {
@@ -43,56 +30,22 @@ const HeroPersonaManager: React.FC<HeroPersonaManagerProps> = ({ personas, equip
     const [draftDescription, setDraftDescription] = useState('');
     const [selectedArchetype, setSelectedArchetype] = useState<Archetype>(Archetype.Sentinel);
     const [isGenerating, setIsGenerating] = useState(false);
-    const [generationStage, setGenerationStage] = useState<'IDLE' | 'ANALYZING' | 'REVIEW' | 'SYNTHESIZING'>('IDLE');
     const [resonance, setResonance] = useState(0);
     const [sourceImage, setSourceImage] = useState<string | null>(null);
-    const [extractedDescriptors, setExtractedDescriptors] = useState<string>('');
-    const [selectedProp, setSelectedProp] = useState('tablet');
-    const [selectedStance, setSelectedStance] = useState('calm');
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         setResonance(Math.min(100, (draftDescription.length / 200) * 100));
     }, [draftDescription]);
 
-    const handleAnalyzePhoto = async () => {
-        if (!sourceImage) {
-            setGenerationStage('REVIEW');
-            setExtractedDescriptors('standard operative, tactical gear');
-            return;
-        }
-        setIsGenerating(true);
-        setGenerationStage('ANALYZING');
-        try {
-            const descriptors = await extractVisualDescriptors(sourceImage);
-            setExtractedDescriptors(descriptors);
-            setGenerationStage('REVIEW');
-        } catch (e) {
-            setExtractedDescriptors('standard operative');
-            setGenerationStage('REVIEW');
-        } finally {
-            setIsGenerating(false);
-        }
-    };
-
     const handleCreatePersona = async () => {
         if (!draftDescription.trim() || isGenerating) return;
         setIsGenerating(true);
-        setGenerationStage('SYNTHESIZING');
         try {
-            await onAddHeroPersona(
-                draftDescription, 
-                selectedArchetype, 
-                sourceImage || undefined,
-                selectedProp,
-                selectedStance,
-                extractedDescriptors
-            );
+            await onAddHeroPersona(draftDescription, selectedArchetype, sourceImage || undefined);
             setDraftDescription('');
             setSourceImage(null);
-            setExtractedDescriptors('');
             setIsWorkspaceOpen(false);
-            setGenerationStage('IDLE');
         } finally {
             setIsGenerating(false);
         }
@@ -124,10 +77,7 @@ const HeroPersonaManager: React.FC<HeroPersonaManagerProps> = ({ personas, equip
                 </div>
                 {personas.length < MAX_PERSONAS && (
                     <button 
-                        onClick={() => {
-                            setIsWorkspaceOpen(!isWorkspaceOpen);
-                            setGenerationStage('IDLE');
-                        }}
+                        onClick={() => setIsWorkspaceOpen(!isWorkspaceOpen)}
                         className={`px-10 py-4 rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-xl active:scale-95 flex-shrink-0 ${isWorkspaceOpen ? 'bg-zinc-800 text-zinc-500' : 'bg-cyan-600 text-white hover:bg-cyan-500'}`}
                     >
                         {isWorkspaceOpen ? 'Abort' : 'OPERATIVE_CONFIGURATION'}
@@ -141,196 +91,115 @@ const HeroPersonaManager: React.FC<HeroPersonaManagerProps> = ({ personas, equip
                     
                     {isGenerating && <div className="absolute top-0 left-0 w-full h-1.5 bg-cyan-500 shadow-[0_0_30px_cyan] z-50 animate-surgical-scan"></div>}
 
-                    {generationStage === 'IDLE' || generationStage === 'ANALYZING' ? (
-                        <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-8 md:gap-12">
-                            <div className="lg:col-span-4 space-y-10 min-w-0">
-                                <div className="space-y-6">
-                                    <div className="flex items-center space-x-3 px-3">
-                                        <Camera className="w-4 h-4 text-cyan-500" />
-                                        <label className="text-[10px] font-black text-cyan-500 uppercase tracking-[0.3em]">Biometric_Source</label>
-                                    </div>
-                                    <div 
-                                        onClick={() => fileInputRef.current?.click()}
-                                        className="relative w-full aspect-square rounded-[3rem] border-2 border-dashed border-zinc-800 bg-zinc-900/40 flex flex-col items-center justify-center cursor-pointer hover:border-cyan-500/50 transition-all overflow-hidden group shadow-inner"
-                                    >
-                                        {sourceImage ? (
-                                            <>
-                                                <img src={sourceImage} alt="Source" className="w-full h-full object-cover opacity-60 grayscale group-hover:grayscale-0 transition-all" />
-                                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                                                    <RefreshCw className="w-10 h-10 text-white animate-spin-slow" />
-                                                </div>
-                                                <button 
-                                                    onClick={(e) => { e.stopPropagation(); setSourceImage(null); }}
-                                                    className="absolute top-6 right-6 p-3 bg-black/80 rounded-full text-zinc-400 hover:text-white transition-colors border border-zinc-700"
-                                                >
-                                                    <X className="w-5 h-5" />
-                                                </button>
-                                            </>
-                                        ) : (
-                                            <div className="text-center p-6 space-y-4">
-                                                <div className="w-16 h-16 bg-zinc-950 rounded-3xl flex items-center justify-center mx-auto border-2 border-zinc-800 group-hover:border-cyan-900 transition-all">
-                                                    <Camera className="w-8 h-8 text-zinc-700 group-hover:text-cyan-400 transition-colors" />
-                                                </div>
-                                                <div>
-                                                    <p className="text-[10px] font-black text-zinc-600 uppercase leading-relaxed tracking-widest">Upload Profile Photo</p>
-                                                </div>
+                    <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-8 md:gap-12">
+                        <div className="lg:col-span-4 space-y-10 min-w-0">
+                            {/* PHOTO UPLOAD SLOT */}
+                            <div className="space-y-6">
+                                <div className="flex items-center space-x-3 px-3">
+                                    <Camera className="w-4 h-4 text-cyan-500" />
+                                    <label className="text-[10px] font-black text-cyan-500 uppercase tracking-[0.3em]">Biometric_Source</label>
+                                </div>
+                                <div 
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="relative w-full aspect-square rounded-[3rem] border-2 border-dashed border-zinc-800 bg-zinc-900/40 flex flex-col items-center justify-center cursor-pointer hover:border-cyan-500/50 transition-all overflow-hidden group shadow-inner"
+                                >
+                                    {sourceImage ? (
+                                        <>
+                                            <img src={sourceImage} alt="Source" className="w-full h-full object-cover opacity-60 grayscale group-hover:grayscale-0 transition-all" />
+                                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                                <RefreshCw className="w-10 h-10 text-white animate-spin-slow" />
                                             </div>
-                                        )}
-                                        <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
-                                    </div>
-                                </div>
-
-                                <div className="space-y-6">
-                                    <div className="flex items-center space-x-3 px-3">
-                                        <Target className="w-4 h-4 text-cyan-500" />
-                                        <label className="text-[10px] font-black text-cyan-500 uppercase tracking-[0.3em]">Operative_Archetype</label>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        {ARCHETYPE_INFO.map(arch => {
-                                            const Icon = arch.icon;
-                                            const isSelected = selectedArchetype === arch.type;
-                                            return (
-                                                <button 
-                                                    key={arch.type}
-                                                    onClick={() => setSelectedArchetype(arch.type)}
-                                                    className={`p-4 rounded-[2rem] border-2 flex flex-col items-center text-center transition-all min-w-0 overflow-hidden ${isSelected ? `bg-${arch.color}-500/10 border-${arch.color}-500 text-white shadow-[0_0_25px_rgba(6,182,212,0.15)]` : 'bg-zinc-900/60 border-zinc-800 text-zinc-700 hover:border-zinc-700'}`}
-                                                >
-                                                    <Icon className={`w-6 h-6 mb-2 transition-colors ${isSelected ? `text-${arch.color}-400` : 'text-zinc-700'}`} />
-                                                    <span className="text-[8px] font-black uppercase leading-tight tracking-wider truncate w-full">{arch.type.split(' ').pop()}</span>
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
+                                            <button 
+                                                onClick={(e) => { e.stopPropagation(); setSourceImage(null); }}
+                                                className="absolute top-6 right-6 p-3 bg-black/80 rounded-full text-zinc-400 hover:text-white transition-colors border border-zinc-700"
+                                            >
+                                                <X className="w-5 h-5" />
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <div className="text-center p-6 space-y-4">
+                                            <div className="w-16 h-16 bg-zinc-950 rounded-3xl flex items-center justify-center mx-auto border-2 border-zinc-800 group-hover:border-cyan-900 transition-all">
+                                                <Camera className="w-8 h-8 text-zinc-700 group-hover:text-cyan-400 transition-colors" />
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] font-black text-zinc-600 uppercase leading-relaxed tracking-widest">Upload Profile Photo</p>
+                                            </div>
+                                        </div>
+                                    )}
+                                    <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
                                 </div>
                             </div>
 
-                            <div className="lg:col-span-8 flex flex-col min-w-0">
-                                <div className="flex flex-col flex-grow bg-zinc-900/40 rounded-[3rem] border border-zinc-800 overflow-hidden shadow-inner relative">
-                                    <div className="bg-zinc-900/80 border-b border-zinc-800 px-8 py-5 flex justify-between items-center">
-                                        <div className="flex items-center space-x-4">
-                                            <Zap className="w-5 h-5 text-amber-500" />
-                                            <label className="text-[10px] font-black text-cyan-500 uppercase tracking-[0.3em]">Operative_Manifesto</label>
-                                        </div>
-                                        <div className="flex items-center space-x-2">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse"></div>
-                                            <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">{Math.round(resonance)}% SYNC</span>
-                                        </div>
-                                    </div>
-
-                                    <div className="p-8 pb-0">
-                                        <div className="bg-amber-500/10 border border-amber-500/30 p-4 rounded-2xl mb-4">
-                                            <p className="text-[9px] font-black text-amber-500 uppercase tracking-widest flex items-center gap-2">
-                                                <Sparkles className="w-3 h-3" /> Oracle_Suggestion:
-                                            </p>
-                                            <p className="text-[10px] text-zinc-400 font-bold mt-1 uppercase italic leading-relaxed">{currentMeta?.suggestion}</p>
-                                        </div>
-                                    </div>
-
-                                    <textarea
-                                        value={draftDescription}
-                                        onChange={(e) => setDraftDescription(e.target.value)}
-                                        placeholder="Define the hero's core determination..."
-                                        className="w-full h-full min-h-[250px] bg-black/30 p-10 pt-4 text-white font-bold text-base outline-none focus:bg-black/50 transition-all placeholder:text-zinc-800 resize-none leading-relaxed"
-                                        maxLength={200}
-                                    />
+                            <div className="space-y-6">
+                                <div className="flex items-center space-x-3 px-3">
+                                    <Target className="w-4 h-4 text-cyan-500" />
+                                    <label className="text-[10px] font-black text-cyan-500 uppercase tracking-[0.3em]">Operative_Archetype</label>
                                 </div>
-
-                                <button 
-                                    onClick={handleAnalyzePhoto}
-                                    disabled={!draftDescription.trim() || isGenerating}
-                                    className="w-full mt-8 bg-cyan-600 hover:bg-cyan-500 text-white font-black py-6 rounded-[2rem] uppercase tracking-[0.2em] text-xs shadow-3xl active:scale-[0.98] transition-all disabled:opacity-10 flex items-center justify-center space-x-6"
-                                >
-                                    {isGenerating ? <Loader className="w-6 h-6 animate-spin"/> : <Sparkles className="w-6 h-6"/>}
-                                    <span>{isGenerating ? 'ANALYZING_BIOMETRICS...' : 'INITIALIZE_HERO_FORGE'}</span>
-                                </button>
+                                <div className="grid grid-cols-2 gap-4">
+                                    {ARCHETYPE_INFO.map(arch => {
+                                        const Icon = arch.icon;
+                                        const isSelected = selectedArchetype === arch.type;
+                                        return (
+                                            <button 
+                                                key={arch.type}
+                                                onClick={() => setSelectedArchetype(arch.type)}
+                                                className={`p-4 rounded-[2rem] border-2 flex flex-col items-center text-center transition-all min-w-0 overflow-hidden ${isSelected ? `bg-${arch.color}-500/10 border-${arch.color}-500 text-white shadow-[0_0_25px_rgba(6,182,212,0.15)]` : 'bg-zinc-900/60 border-zinc-800 text-zinc-600 hover:border-zinc-700'}`}
+                                            >
+                                                <Icon className={`w-6 h-6 mb-2 transition-colors ${isSelected ? `text-${arch.color}-400` : 'text-zinc-700'}`} />
+                                                <span className="text-[8px] font-black uppercase leading-tight tracking-wider truncate w-full">{arch.type.split(' ').pop()}</span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
                             </div>
                         </div>
-                    ) : generationStage === 'REVIEW' || generationStage === 'SYNTHESIZING' ? (
-                        <div className="relative z-10 flex flex-col items-center max-w-4xl mx-auto space-y-12 py-8 animate-fade-in">
-                            <div className="text-center space-y-4">
-                                <h3 className="text-3xl font-black text-white uppercase tracking-tighter leading-none">Hero_Forge_Calibration</h3>
-                                <p className="text-[10px] font-black text-cyan-500 uppercase tracking-[0.4em]">Refine visual identity before neural synthesis</p>
-                            </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-12 w-full">
-                                <div className="space-y-10">
-                                    <div className="space-y-4">
-                                        <label className="text-[10px] font-black text-zinc-600 uppercase tracking-widest pl-4">Visual_Descriptor_Tags</label>
-                                        <div className="bg-zinc-950 border-2 border-zinc-800 rounded-3xl p-6 shadow-inner">
-                                            <textarea 
-                                                value={extractedDescriptors}
-                                                onChange={(e) => setExtractedDescriptors(e.target.value)}
-                                                className="w-full bg-transparent text-sm font-bold text-white outline-none resize-none min-h-[100px] leading-relaxed uppercase placeholder:text-zinc-900"
-                                                placeholder="Enter character visual tags..."
-                                            />
-                                            <p className="text-[8px] font-black text-zinc-700 mt-4 uppercase italic">Identified from biometric sync. Edit to override.</p>
-                                        </div>
+                        <div className="lg:col-span-8 flex flex-col min-w-0">
+                            <div className="flex flex-col flex-grow bg-zinc-900/40 rounded-[3rem] border border-zinc-800 overflow-hidden shadow-inner relative">
+                                <div className="bg-zinc-900/80 border-b border-zinc-800 px-8 py-5 flex justify-between items-center">
+                                    <div className="flex items-center space-x-4">
+                                        <Zap className="w-5 h-5 text-amber-500" />
+                                        <label className="text-[10px] font-black text-cyan-500 uppercase tracking-[0.3em]">Operative_Manifesto</label>
                                     </div>
-
-                                    <div className="space-y-4">
-                                        <label className="text-[10px] font-black text-zinc-600 uppercase tracking-widest pl-4">Operational_Prop</label>
-                                        <div className="grid grid-cols-3 gap-3">
-                                            {PROPS.map(p => (
-                                                <button 
-                                                    key={p.id}
-                                                    onClick={() => setSelectedProp(p.id)}
-                                                    className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-3 ${selectedProp === p.id ? 'bg-cyan-500/10 border-cyan-500 text-white shadow-lg' : 'bg-zinc-900 border-zinc-800 text-zinc-600'}`}
-                                                >
-                                                    {p.icon}
-                                                    <span className="text-[8px] font-black uppercase tracking-tighter">{p.label}</span>
-                                                </button>
-                                            ))}
-                                        </div>
+                                    <div className="flex items-center space-x-2">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse"></div>
+                                        <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">{Math.round(resonance)}% SYNC</span>
                                     </div>
                                 </div>
 
-                                <div className="space-y-10">
-                                    <div className="space-y-4">
-                                        <label className="text-[10px] font-black text-zinc-600 uppercase tracking-widest pl-4">Neuromuscular_Stance</label>
-                                        <div className="flex flex-col gap-3">
-                                            {STANCES.map(s => (
-                                                <button 
-                                                    key={s.id}
-                                                    onClick={() => setSelectedStance(s.id)}
-                                                    className={`p-5 rounded-2xl border-2 text-left transition-all flex items-center justify-between ${selectedStance === s.id ? 'bg-cyan-500/10 border-cyan-500 text-white shadow-lg' : 'bg-zinc-900 border-zinc-800 text-zinc-600'}`}
-                                                >
-                                                    <span className="text-[10px] font-black uppercase tracking-widest">{s.label}</span>
-                                                    {selectedStance === s.id && <Check className="w-4 h-4 text-cyan-500" />}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
+                                <div className="p-8 pb-0">
+                                     <div className="bg-amber-500/10 border border-amber-500/30 p-4 rounded-2xl mb-4">
+                                         <p className="text-[9px] font-black text-amber-500 uppercase tracking-widest flex items-center gap-2">
+                                             <Sparkles className="w-3 h-3" /> Oracle_Suggestion:
+                                         </p>
+                                         <p className="text-[10px] text-zinc-400 font-bold mt-1 uppercase italic leading-relaxed">{currentMeta?.suggestion}</p>
+                                     </div>
+                                </div>
 
-                                    <div className="bg-zinc-900/60 p-8 rounded-[2.5rem] border border-zinc-800 space-y-4 shadow-inner">
-                                        <div className="flex items-center space-x-3">
-                                            <ShieldCheck className="w-4 h-4 text-emerald-500" />
-                                            <span className="text-[10px] font-black uppercase text-zinc-500">Uniformity_Lock_Active</span>
-                                        </div>
-                                        <p className="text-[9px] text-zinc-600 font-bold uppercase leading-relaxed italic">
-                                            "Locked profile pose, lighting, and composition ensures high-fidelity representation across the ledger network."
-                                        </p>
-                                    </div>
+                                <textarea
+                                    value={draftDescription}
+                                    onChange={(e) => setDraftDescription(e.target.value)}
+                                    placeholder="Define the hero's core determination..."
+                                    className="w-full h-full min-h-[250px] bg-black/30 p-10 pt-4 text-white font-bold text-base outline-none focus:bg-black/50 transition-all placeholder:text-zinc-800 resize-none leading-relaxed"
+                                    maxLength={200}
+                                />
+
+                                <div className="bg-zinc-900/80 p-5 border-t border-zinc-800 flex justify-between items-center px-10">
+                                    <span className="text-[9px] font-black text-zinc-700 uppercase tracking-widest">Buffer: {draftDescription.length}/200</span>
+                                    {isGenerating && <div className="flex items-center space-x-3 text-cyan-500 animate-pulse"><Loader className="w-4 h-4 animate-spin"/> <span className="text-[10px] font-black uppercase tracking-widest">Synthesizing...</span></div>}
                                 </div>
                             </div>
 
-                            <div className="w-full flex gap-4">
-                                <button 
-                                    onClick={() => setGenerationStage('IDLE')}
-                                    className="px-10 py-6 rounded-[2rem] bg-zinc-900 border border-zinc-800 text-zinc-500 font-black uppercase text-xs hover:text-white transition-all"
-                                >
-                                    Back
-                                </button>
-                                <button 
-                                    onClick={handleCreatePersona}
-                                    disabled={generationStage === 'SYNTHESIZING'}
-                                    className="flex-grow bg-cyan-600 hover:bg-cyan-500 text-white font-black py-6 rounded-[2rem] uppercase tracking-[0.4em] text-xs shadow-3xl active:scale-[0.98] transition-all flex items-center justify-center space-x-6"
-                                >
-                                    {generationStage === 'SYNTHESIZING' ? <Loader className="w-6 h-6 animate-spin"/> : <Sparkles className="w-6 h-6"/>}
-                                    <span>{generationStage === 'SYNTHESIZING' ? 'NEURAL_SYNTHESIS_IN_PROGRESS...' : 'FORGE_HERO_PORTRAIT'}</span>
-                                </button>
-                            </div>
+                            <button 
+                                onClick={handleCreatePersona}
+                                disabled={!draftDescription.trim() || isGenerating}
+                                className="w-full mt-8 bg-cyan-600 hover:bg-cyan-500 text-white font-black py-6 rounded-[2rem] uppercase tracking-[0.2em] text-xs shadow-3xl active:scale-[0.98] transition-all disabled:opacity-10 flex items-center justify-center space-x-6 group overflow-hidden relative"
+                            >
+                                {isGenerating ? <Loader className="w-6 h-6 animate-spin text-white"/> : <Sparkles className="w-6 h-6 text-white transition-transform group-hover:scale-125"/>}
+                                <span className="truncate">{isGenerating ? 'NEURAL_RECONSTRUCTION...' : 'RECRUIT_OPERATIVE'}</span>
+                            </button>
                         </div>
-                    ) : null}
+                    </div>
                 </div>
             )}
 

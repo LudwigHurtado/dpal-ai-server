@@ -76,13 +76,12 @@ const AiWorkDirectivesView: React.FC<AiWorkDirectivesViewProps> = ({
     finally { setIsSubmittingProof(false); }
   };
 
-  /** FIX: Changed 'component' to 'render' for all workPanels to match WorkspacePanel requirement */
   const workPanels = [
       {
           id: 'directiveQueue',
           title: 'Directive_Queue',
-          render: (ctx: any) => (
-              <PanelShell {...ctx} id="directiveQueue" title="Directive_Queue">
+          component: (
+              <PanelShell id="directiveQueue" title="Directive_Queue">
                 <div className="p-6 space-y-6">
                     <div className="space-y-4">
                         <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center space-x-2">
@@ -118,8 +117,8 @@ const AiWorkDirectivesView: React.FC<AiWorkDirectivesViewProps> = ({
       {
           id: 'directiveDetail',
           title: 'Field_Protocol',
-          render: (ctx: any) => (
-              <PanelShell {...ctx} id="directiveDetail" title="Field_Protocol">
+          component: (
+              <PanelShell id="directiveDetail" title="Field_Protocol">
                 {activeDirective ? (
                     <div className="p-8 space-y-8">
                         <h2 className="text-2xl font-black uppercase tracking-tighter text-white leading-none">{activeDirective.title}</h2>
@@ -145,8 +144,8 @@ const AiWorkDirectivesView: React.FC<AiWorkDirectivesViewProps> = ({
       {
           id: 'evidencePanelWork',
           title: 'Proof_Materialization',
-          render: (ctx: any) => (
-              <PanelShell {...ctx} id="evidencePanelWork" title="Proof_Materialization">
+          component: (
+              <PanelShell id="evidencePanelWork" title="Proof_Materialization">
                 <div className="p-6 space-y-6">
                     <div 
                         onClick={() => fileInputRef.current?.click()}

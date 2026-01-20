@@ -1,9 +1,10 @@
-
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Category, Report, SeverityLevel } from '../types';
 import { 
-  MapPin, Loader, Camera, ShieldCheck, Target, Zap, 
-  FileText, CheckCircle, Clock, Play, Database, Broadcast, Sparkles, X
+  MapPin, Send, Loader, Camera, RefreshCw, AlertTriangle, ShieldCheck, Target, Zap, 
+  // Added Broadcast, removed non-existent BarChart
+  Activity, Info, Briefcase, Database, Scale, Globe, FileText, Trash2, 
+  CheckCircle, ChevronRight, Maximize2, Clock, Play, Volume2, Paperclip, Plus, X, Sparkles, Broadcast
 } from './icons';
 import { FORM_BUNDLE, CATEGORIES_WITH_ICONS } from '../constants';
 
@@ -20,12 +21,12 @@ interface AttachedFile {
 }
 
 const STEPS = [
-  { id: 'DOMAIN', label: 'Domain', icon: <Target className="w-4 h-4"/> },
-  { id: 'TEMPORAL', label: 'Sync', icon: <Clock className="w-4 h-4"/> },
-  { id: 'FORENSIC', label: 'Data', icon: <FileText className="w-4 h-4"/> },
-  { id: 'EVIDENCE', label: 'Intel', icon: <Camera className="w-4 h-4"/> },
-  { id: 'SAFETY', label: 'Audit', icon: <ShieldCheck className="w-4 h-4"/> },
-  { id: 'COMMIT', label: 'Seal', icon: <Database className="w-4 h-4"/> }
+  { id: 'DOMAIN', label: 'Domain_Picker', icon: <Target className="w-4 h-4"/> },
+  { id: 'TEMPORAL', label: 'Temporal_Sync', icon: <Clock className="w-4 h-4"/> },
+  { id: 'FORENSIC', label: 'Forensic_Data', icon: <FileText className="w-4 h-4"/> },
+  { id: 'EVIDENCE', label: 'Visual_Intel', icon: <Camera className="w-4 h-4"/> },
+  { id: 'SAFETY', label: 'Safety_Audit', icon: <ShieldCheck className="w-4 h-4"/> },
+  { id: 'COMMIT', label: 'Ledger_Seal', icon: <Database className="w-4 h-4"/> }
 ];
 
 const ForensicField: React.FC<{ 
@@ -34,21 +35,20 @@ const ForensicField: React.FC<{
     onChange: (val: any) => void;
 }> = ({ question, value, onChange }) => {
     const { label, help_text, answer_type, options } = question;
-    const baseClass = "w-full bg-zinc-950 border-2 border-zinc-800 p-3 sm:p-4 rounded-xl sm:rounded-2xl text-sm font-bold text-white outline-none focus:border-amber-500 transition-all placeholder:text-zinc-900 shadow-inner";
-    const labelClass = "text-[10px] font-black tracking-[0.12em] sm:tracking-[0.35em] sm:uppercase text-zinc-400 ml-2";
+    const baseClass = "w-full bg-zinc-950 border-2 border-zinc-800 p-4 rounded-2xl text-sm font-bold text-white outline-none focus:border-cyan-600 transition-all placeholder:text-zinc-900 shadow-inner";
 
     switch (answer_type) {
         case 'single_select':
             return (
-                <div className="space-y-2 sm:space-y-3">
-                    <label className={labelClass}>{label}</label>
+                <div className="space-y-3">
+                    <label className="text-[10px] font-black text-cyan-500 uppercase tracking-widest ml-2">{label}</label>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {options.map((opt: string) => (
                             <button
                                 key={opt}
                                 type="button"
                                 onClick={() => onChange(opt)}
-                                className={`px-4 py-3 rounded-xl border-2 transition-all text-[9px] font-black uppercase text-left truncate ${value === opt ? 'bg-amber-600 border-amber-400 text-white shadow-[0_0_15px_rgba(245,158,11,0.3)]' : 'bg-zinc-950 border-zinc-900 text-zinc-600 hover:border-zinc-700'}`}
+                                className={`px-4 py-3 rounded-xl border-2 transition-all text-[9px] font-black uppercase text-left truncate ${value === opt ? 'bg-cyan-600 border-cyan-400 text-white shadow-[0_0_15px_rgba(6,182,212,0.3)]' : 'bg-zinc-950 border-zinc-900 text-zinc-600 hover:border-zinc-700'}`}
                             >
                                 {opt}
                             </button>
@@ -58,8 +58,8 @@ const ForensicField: React.FC<{
             );
         case 'multi_select':
             return (
-                <div className="space-y-2 sm:space-y-3">
-                    <label className={labelClass}>{label}</label>
+                <div className="space-y-3">
+                    <label className="text-[10px] font-black text-cyan-500 uppercase tracking-widest ml-2">{label}</label>
                     <div className="grid grid-cols-2 gap-2">
                         {options.map((opt: string) => {
                             const isSel = (value || []).includes(opt);
@@ -82,15 +82,15 @@ const ForensicField: React.FC<{
             );
         case 'datetime':
             return (
-                <div className="space-y-2 sm:space-y-3">
-                    <label className={labelClass}>{label}</label>
+                <div className="space-y-3">
+                    <label className="text-[10px] font-black text-cyan-500 uppercase tracking-widest ml-2">{label}</label>
                     <input type="datetime-local" value={value || ''} onChange={e => onChange(e.target.value)} className={baseClass} />
                 </div>
             );
         case 'short_text':
             return (
-                <div className="space-y-2 sm:space-y-3">
-                    <label className={labelClass}>{label}</label>
+                <div className="space-y-3">
+                    <label className="text-[10px] font-black text-cyan-500 uppercase tracking-widest ml-2">{label}</label>
                     <input type="text" value={value || ''} onChange={e => onChange(e.target.value)} className={baseClass} placeholder={help_text || "Input data..."} />
                 </div>
             );
@@ -130,17 +130,16 @@ const SubmissionPanel: React.FC<SubmissionPanelProps> = ({ addReport, preselecte
 
   const handleNext = () => {
     if (activeStepIndex < STEPS.length - 1) setActiveStepIndex(activeStepIndex + 1);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handlePrev = () => {
     if (activeStepIndex > 0) setActiveStepIndex(activeStepIndex - 1);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleFileSelection = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
+    // Explicitly type file as File to resolve unknown type issues
     const newAttachments: AttachedFile[] = Array.from(files).map((file: File) => {
         let type: AttachedFile['type'] = 'other';
         if (file.type.startsWith('image/')) type = 'image';
@@ -172,21 +171,21 @@ const SubmissionPanel: React.FC<SubmissionPanelProps> = ({ addReport, preselecte
     switch (STEPS[activeStepIndex].id) {
       case 'DOMAIN':
         return (
-          <div className="space-y-6 sm:space-y-8 animate-fade-in">
+          <div className="space-y-8 animate-fade-in">
             <div className="text-center">
-              <h3 className="text-xl sm:text-2xl font-black uppercase text-white tracking-tighter">Initialize_Reporting_Node</h3>
-              <p className="text-[9px] sm:text-[10px] font-bold text-zinc-500 uppercase tracking-widest mt-2">Select the domain protocol for this artifact</p>
+              <h3 className="text-2xl font-black uppercase text-white tracking-tighter">Initialize_Reporting_Node</h3>
+              <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mt-2">Select the domain protocol for this artifact</p>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 max-h-[400px] sm:max-h-[300px] overflow-y-auto custom-scrollbar p-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 max-h-[300px] overflow-y-auto custom-scrollbar p-2">
               {CATEGORIES_WITH_ICONS.map(cat => (
                 <button
                   key={cat.value}
                   type="button"
                   onClick={() => { setCategory(cat.value as Category); handleNext(); }}
-                  className={`flex flex-col items-center justify-center p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] border-2 transition-all ${category === cat.value ? 'bg-amber-600 border-amber-400 text-white shadow-2xl scale-105' : 'bg-zinc-950 border-zinc-800 text-zinc-500 hover:border-zinc-700'}`}
+                  className={`flex flex-col items-center justify-center p-6 rounded-[2rem] border-2 transition-all ${category === cat.value ? 'bg-cyan-600 border-cyan-400 text-white shadow-2xl scale-105' : 'bg-zinc-950 border-zinc-800 text-zinc-500 hover:border-zinc-700'}`}
                 >
-                  <span className="text-3xl sm:text-4xl mb-3 sm:mb-4 grayscale group-hover:grayscale-0">{cat.icon}</span>
-                  <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-center leading-none">{cat.value}</span>
+                  <span className="text-4xl mb-4 grayscale group-hover:grayscale-0">{cat.icon}</span>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-center leading-none">{cat.value}</span>
                 </button>
               ))}
             </div>
@@ -194,155 +193,159 @@ const SubmissionPanel: React.FC<SubmissionPanelProps> = ({ addReport, preselecte
         );
       case 'TEMPORAL':
         return (
-          <div className="space-y-6 sm:space-y-8 animate-fade-in">
+          <div className="space-y-8 animate-fade-in">
              <div className="text-center">
-              <h3 className="text-xl sm:text-2xl font-black uppercase text-white tracking-tighter">Geospatial_Temporal_Anchor</h3>
-              <p className="text-[9px] sm:text-[10px] font-bold text-zinc-500 uppercase tracking-widest mt-2">Define when and where the incident manifested</p>
+              <h3 className="text-2xl font-black uppercase text-white tracking-tighter">Geospatial_Temporal_Anchor</h3>
+              <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mt-2">Define when and where the incident manifested</p>
             </div>
-            <div className="space-y-4 sm:space-y-6">
-                <div className="space-y-2 sm:space-y-3">
-                    <label className="text-[10px] font-black text-amber-500 tracking-[0.12em] sm:tracking-[0.35em] sm:uppercase ml-2">01. Sector_Identifier</label>
+            <div className="space-y-6">
+                <div className="space-y-3">
+                    <label className="text-[10px] font-black text-cyan-500 uppercase tracking-widest ml-4">01. Sector_Identifier</label>
                     <div className="relative">
-                        <MapPin className="absolute left-4 sm:left-5 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 h-5 text-zinc-700" />
-                        <input value={location} onChange={e => setLocation(e.target.value)} className="w-full bg-zinc-950 border-2 border-zinc-800 pl-11 sm:pl-14 pr-4 sm:pr-6 py-4 sm:py-5 rounded-xl sm:rounded-2xl outline-none focus:border-amber-500 text-white font-black uppercase tracking-widest text-xs sm:text-sm shadow-inner" placeholder="Address or Coordinates..." />
+                        <MapPin className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-700" />
+                        <input value={location} onChange={e => setLocation(e.target.value)} className="w-full bg-zinc-950 border-2 border-zinc-800 pl-14 pr-6 py-5 rounded-2xl outline-none focus:border-cyan-500 text-white font-black uppercase tracking-widest text-sm shadow-inner" placeholder="Address, Node, or Coordinates..." />
                     </div>
                 </div>
-                <div className="space-y-2 sm:space-y-3">
-                    <label className="text-[10px] font-black text-amber-500 tracking-[0.12em] sm:tracking-[0.35em] sm:uppercase ml-2">02. Institutional_Triage</label>
+                <div className="space-y-3">
+                    <label className="text-[10px] font-black text-cyan-500 uppercase tracking-widest ml-4">02. Institutional_Triage</label>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                         {['Informational', 'Standard', 'Critical', 'Catastrophic'].map(lvl => (
-                            <button key={lvl} type="button" onClick={() => setSeverity(lvl as SeverityLevel)} className={`py-3 sm:py-4 rounded-xl border-2 text-[9px] font-black uppercase transition-all ${severity === lvl ? 'bg-amber-600 border-amber-400 text-white shadow-lg' : 'bg-black border-zinc-900 text-zinc-600'}`}>{lvl}</button>
+                            <button key={lvl} type="button" onClick={() => setSeverity(lvl as SeverityLevel)} className={`py-4 rounded-xl border-2 text-[9px] font-black uppercase transition-all ${severity === lvl ? 'bg-amber-600 border-amber-400 text-white shadow-lg' : 'bg-black border-zinc-900 text-zinc-600'}`}>{lvl}</button>
                         ))}
                     </div>
                 </div>
             </div>
+            <button onClick={handleNext} disabled={!location} className="w-full bg-white text-black font-black py-5 rounded-2xl uppercase tracking-widest text-xs shadow-xl active:scale-95 disabled:opacity-20 transition-all">Proceed_To_Data_Intake</button>
           </div>
         );
       case 'FORENSIC':
         return (
-          <div className="space-y-6 sm:space-y-8 animate-fade-in">
+          <div className="space-y-8 animate-fade-in">
             <div className="text-center">
-              <h3 className="text-xl sm:text-2xl font-black uppercase text-white tracking-tighter">Forensic_Data_Intake</h3>
-              <p className="text-[9px] sm:text-[10px] font-bold text-zinc-500 uppercase tracking-widest mt-2">Protocol: SH-256 Structured Fact Verification</p>
+              <h3 className="text-2xl font-black uppercase text-white tracking-tighter">Forensic_Data_Intake</h3>
+              <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mt-2">Protocol: SH-256 Structured Fact Verification</p>
             </div>
-            <div className="space-y-4 sm:space-y-6 max-h-[450px] sm:max-h-[400px] overflow-y-auto custom-scrollbar pr-2 sm:pr-4">
-               {schema?.core_questions.slice(0, 4).map((q: any) => (
+            <div className="space-y-6 max-h-[400px] overflow-y-auto custom-scrollbar pr-4">
+               {schema?.core_questions.slice(0, 4).map(q => (
                  <ForensicField key={q.id} question={q} value={answers[q.id]} onChange={v => setAnswers({...answers, [q.id]: v})} />
                ))}
-               <div className="space-y-2 sm:space-y-3">
-                   <label className="text-[10px] font-black text-amber-500 tracking-[0.12em] sm:tracking-[0.35em] sm:uppercase ml-2">Situational_Summary</label>
-                   <textarea value={description} onChange={e => setDescription(e.target.value)} className="w-full bg-zinc-950 border-2 border-zinc-800 p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] text-sm font-bold text-white outline-none focus:border-amber-500 transition-all placeholder:text-zinc-900 min-h-[120px] resize-none leading-relaxed" placeholder="Summarize the core observation..." />
+               <div className="space-y-3">
+                   <label className="text-[10px] font-black text-cyan-500 uppercase tracking-widest ml-2">Situational_Summary</label>
+                   <textarea value={description} onChange={e => setDescription(e.target.value)} className="w-full bg-zinc-950 border-2 border-zinc-800 p-6 rounded-[2rem] text-sm font-bold text-white outline-none focus:border-cyan-500 transition-all placeholder:text-zinc-900 min-h-[120px] resize-none leading-relaxed" placeholder="Summarize the core observation..." />
                </div>
             </div>
+            <button onClick={handleNext} disabled={description.length < 10} className="w-full bg-white text-black font-black py-5 rounded-2xl uppercase tracking-widest text-xs shadow-xl active:scale-95 disabled:opacity-20 transition-all">Continue_To_Evidence_Sync</button>
           </div>
         );
       case 'EVIDENCE':
         return (
-          <div className="space-y-6 sm:space-y-8 animate-fade-in">
+          <div className="space-y-8 animate-fade-in">
             <div className="text-center">
-              <h3 className="text-xl sm:text-2xl font-black uppercase text-white tracking-tighter">Visual_Intel_Sync</h3>
-              <p className="text-[9px] sm:text-[10px] font-bold text-zinc-500 uppercase tracking-widest mt-2">Attach telemetry shards to strengthen fidelity</p>
+              <h3 className="text-2xl font-black uppercase text-white tracking-tighter">Visual_Intel_Synchronization</h3>
+              <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mt-2">Attach telemetry shards to strengthen report fidelity</p>
             </div>
             
             <div 
               onClick={() => fileInputRef.current?.click()}
-              className="py-10 sm:py-16 border-2 border-dashed border-zinc-800 rounded-[2rem] sm:rounded-[3rem] bg-zinc-950 flex flex-col items-center justify-center space-y-4 sm:space-y-6 cursor-pointer hover:border-amber-500/50 hover:bg-zinc-900/50 transition-all group shadow-inner"
+              className="py-16 border-2 border-dashed border-zinc-800 rounded-[3rem] bg-zinc-950 flex flex-col items-center justify-center space-y-6 cursor-pointer hover:border-cyan-500/50 hover:bg-zinc-900/50 transition-all group shadow-inner"
             >
               <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelection} accept="image/*,video/*,audio/*" />
-              <div className="p-4 sm:p-6 bg-zinc-900 rounded-2xl sm:rounded-[2rem] border border-zinc-800 group-hover:border-amber-900 group-hover:scale-110 transition-all shadow-xl">
-                  <Camera className="w-8 h-8 sm:w-12 h-12 text-zinc-700 group-hover:text-amber-400" />
+              <div className="p-6 bg-zinc-900 rounded-[2rem] border border-zinc-800 group-hover:border-cyan-900 group-hover:scale-110 transition-all shadow-xl">
+                  <Camera className="w-12 h-12 text-zinc-700 group-hover:text-cyan-400" />
               </div>
               <div className="text-center">
-                <p className="text-xs font-black text-zinc-500 uppercase tracking-widest group-hover:text-amber-100 transition-colors">Awaiting_Telemetry_Input</p>
+                <p className="text-xs font-black text-zinc-500 uppercase tracking-widest group-hover:text-cyan-100 transition-colors">Awaiting_Telemetry_Input</p>
                 <p className="text-[8px] font-bold text-zinc-700 uppercase tracking-widest mt-2">TAP TO UPLOAD PICTURES OR VIDEO</p>
               </div>
             </div>
 
             {attachments.length > 0 && (
-                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3 sm:gap-4 animate-fade-in">
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-4 animate-fade-in">
                     {attachments.map((item, i) => (
-                        <div key={i} className="relative aspect-square bg-zinc-950 border-2 border-zinc-800 rounded-xl sm:rounded-2xl overflow-hidden shadow-lg group/item">
+                        <div key={i} className="relative aspect-square bg-zinc-950 border-2 border-zinc-800 rounded-2xl overflow-hidden shadow-lg group/item">
                             {item.type === 'image' ? (
                                 <img src={item.preview!} alt="P" className="w-full h-full object-cover grayscale opacity-70 group-hover/item:grayscale-0 group-hover/item:opacity-100 transition-all" />
                             ) : (
-                                <div className="w-full h-full flex flex-col items-center justify-center text-zinc-700 group-hover/item:text-amber-500 transition-colors">
-                                    {item.type === 'video' ? <Play className="w-5 h-5 sm:w-6 h-6"/> : <FileText className="w-5 h-5 sm:w-6 h-6"/>}
+                                <div className="w-full h-full flex flex-col items-center justify-center text-zinc-700 group-hover/item:text-cyan-500 transition-colors">
+                                    {item.type === 'video' ? <Play className="w-6 h-6"/> : <FileText className="w-6 h-6"/>}
                                 </div>
                             )}
-                            <button type="button" onClick={() => setAttachments(prev => prev.filter((_, idx) => idx !== i))} className="absolute top-1 right-1 p-1 bg-black/80 rounded-lg text-rose-500 opacity-100 sm:opacity-0 group-hover/item:opacity-100 transition-opacity border border-rose-900/30">
+                            <button type="button" onClick={() => setAttachments(prev => prev.filter((_, idx) => idx !== i))} className="absolute top-1 right-1 p-1.5 bg-black/80 rounded-lg text-rose-500 opacity-0 group-hover/item:opacity-100 transition-opacity border border-rose-900/30">
                                 <X className="w-3 h-3" />
                             </button>
                         </div>
                     ))}
                 </div>
             )}
+            <button onClick={handleNext} className="w-full bg-white text-black font-black py-5 rounded-2xl uppercase tracking-widest text-xs shadow-xl active:scale-95 transition-all">Proceed_To_Safety_Audit</button>
           </div>
         );
       case 'SAFETY':
         return (
-          <div className="space-y-6 sm:space-y-8 animate-fade-in">
+          <div className="space-y-8 animate-fade-in">
             <div className="text-center">
-              <h3 className="text-xl sm:text-2xl font-black uppercase text-white tracking-tighter text-emerald-400">Operator_Safety_Protocol</h3>
-              <p className="text-[9px] sm:text-[10px] font-bold text-zinc-500 uppercase tracking-widest mt-2">Final validation of field security status</p>
+              <h3 className="text-2xl font-black uppercase text-white tracking-tighter text-emerald-400">Operator_Safety_Protocol</h3>
+              <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mt-2">Final validation of field security status</p>
             </div>
             <div 
               onClick={() => setSafetyConfirmed(!safetyConfirmed)}
-              className={`p-8 sm:p-10 rounded-[2rem] sm:rounded-[3rem] border-4 transition-all duration-300 cursor-pointer flex flex-col items-center space-y-4 sm:space-y-6 shadow-2xl relative overflow-hidden ${safetyConfirmed ? 'bg-emerald-950/20 border-emerald-500' : 'bg-zinc-950 border-zinc-800 border-dashed hover:border-zinc-700'}`}
+              className={`p-10 rounded-[3rem] border-4 transition-all duration-300 cursor-pointer flex flex-col items-center space-y-6 shadow-2xl relative overflow-hidden ${safetyConfirmed ? 'bg-emerald-950/20 border-emerald-500' : 'bg-zinc-950 border-zinc-800 border-dashed hover:border-zinc-700'}`}
             >
-                <div className={`p-4 sm:p-6 rounded-full transition-all duration-500 ${safetyConfirmed ? 'bg-emerald-500 text-black shadow-[0_0_30px_emerald]' : 'bg-zinc-900 text-zinc-700'}`}>
-                    <ShieldCheck className="w-10 h-10 sm:w-12 h-12" />
+                <div className={`p-6 rounded-full transition-all duration-500 ${safetyConfirmed ? 'bg-emerald-500 text-black shadow-[0_0_30px_emerald]' : 'bg-zinc-900 text-zinc-700'}`}>
+                    <ShieldCheck className="w-12 h-12" />
                 </div>
                 <div className="text-center space-y-2">
-                    <p className="text-sm font-black text-white uppercase tracking-tighter">{safetyConfirmed ? 'Security_Verified' : 'Confirm_Field_Security'}</p>
-                    <p className="text-[10px] text-zinc-500 font-bold uppercase leading-relaxed max-w-[30ch]">I verify that I have maintained a safe distance and avoided conflict.</p>
+                    <p className="text-sm font-black text-white uppercase tracking-tighter">{safetyConfirmed ? 'Security_Protocol_Acknowledged' : 'Verify_Physical_Security'}</p>
+                    <p className="text-[10px] text-zinc-500 font-bold uppercase leading-relaxed max-w-[30ch]">I verify that I have maintained a safe distance and avoided direct conflict.</p>
                 </div>
-                {safetyConfirmed && <div className="absolute top-4 right-4 text-emerald-500 animate-pulse"><Sparkles className="w-5 h-5 sm:w-6 h-6"/></div>}
+                {safetyConfirmed && <div className="absolute top-6 right-6 text-emerald-500 animate-pulse"><Sparkles className="w-6 h-6"/></div>}
             </div>
+            <button onClick={handleNext} disabled={!safetyConfirmed} className="w-full bg-white text-black font-black py-5 rounded-2xl uppercase tracking-widest text-xs shadow-xl active:scale-95 disabled:opacity-20 transition-all">Review_Final_Shard</button>
           </div>
         );
       case 'COMMIT':
         return (
-          <div className="space-y-6 sm:space-y-10 animate-fade-in pb-8">
+          <div className="space-y-10 animate-fade-in pb-8">
             <div className="text-center">
-              <h3 className="text-xl sm:text-2xl font-black uppercase text-white tracking-tighter">Ledger_Review</h3>
-              <p className="text-[9px] sm:text-[10px] font-bold text-zinc-500 uppercase tracking-widest mt-2">Review forensic metadata before cryptographic sealing</p>
+              <h3 className="text-2xl font-black uppercase text-white tracking-tighter">Ledger_Preview_Protocol</h3>
+              <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mt-2">Review forensic metadata before cryptographic sealing</p>
             </div>
 
-            <div className="bg-zinc-900 border-2 border-zinc-800 rounded-[1.5rem] sm:rounded-[2.5rem] p-6 sm:p-8 space-y-6 shadow-xl relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-8 opacity-5"><Broadcast className="w-16 h-16 sm:w-20 h-20 text-amber-500"/></div>
-                <div className="grid grid-cols-2 gap-6 sm:gap-8">
+            <div className="bg-zinc-900 border-2 border-zinc-800 rounded-[2.5rem] p-8 space-y-6 shadow-xl relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-8 opacity-5"><Broadcast className="w-20 h-20 text-cyan-500"/></div>
+                <div className="grid grid-cols-2 gap-8">
                     <div className="space-y-1">
-                        <p className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">Protocol</p>
-                        <p className="text-xs sm:text-sm font-black text-white uppercase truncate">{category || 'UNDETERMINED'}</p>
+                        <p className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">Target_Domain</p>
+                        <p className="text-sm font-black text-white uppercase">{category}</p>
                     </div>
                     <div className="space-y-1">
-                        <p className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">Geospatial</p>
-                        <p className="text-xs sm:text-sm font-black text-white uppercase truncate">{location || 'GEO_PENDING'}</p>
+                        <p className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">Geospatial_Lock</p>
+                        <p className="text-sm font-black text-white uppercase truncate">{location}</p>
                     </div>
                     <div className="space-y-1">
-                        <p className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">Temporal</p>
-                        <p className="text-xs sm:text-sm font-black text-white uppercase">SYSTEM_LOCKED</p>
+                        <p className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">Temporal_Stamp</p>
+                        <p className="text-sm font-black text-white uppercase">SYSTEM_TIME_LOCKED</p>
                     </div>
                     <div className="space-y-1">
-                        <p className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">Evidence</p>
-                        <p className="text-xs sm:text-sm font-black text-emerald-500 uppercase">{attachments.length} Shards</p>
+                        <p className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">Evidence_Shards</p>
+                        <p className="text-sm font-black text-emerald-500 uppercase">{attachments.length} Synced</p>
                     </div>
                 </div>
-                <div className="pt-4 sm:pt-6 border-t border-zinc-800">
-                    <p className="text-[8px] font-black text-zinc-600 uppercase tracking-widest mb-2">Narrative_Hash</p>
-                    <p className="text-[11px] sm:text-xs text-zinc-400 leading-relaxed line-clamp-2 italic">"{description}"</p>
+                <div className="pt-6 border-t border-zinc-800">
+                    <p className="text-[8px] font-black text-zinc-600 uppercase tracking-widest mb-2">Situational_Narrative</p>
+                    <p className="text-xs text-zinc-400 leading-relaxed line-clamp-3 italic">"{description}"</p>
                 </div>
             </div>
 
             <button 
                 type="submit" 
                 disabled={isSubmitting} 
-                className="w-full bg-amber-600 hover:bg-amber-500 text-white font-black py-6 sm:py-8 rounded-[1.5rem] sm:rounded-[2.5rem] shadow-3xl transition-all active:scale-95 flex items-center justify-center space-x-4 border-b-8 border-amber-800 group"
+                className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-black py-8 rounded-[2.5rem] shadow-3xl transition-all active:scale-95 flex items-center justify-center space-x-4 border-b-8 border-cyan-800 group"
             >
                 {isSubmitting ? (
-                    <><Loader className="w-6 h-6 sm:w-8 h-8 animate-spin"/><span className="text-xs sm:text-sm uppercase tracking-[0.2em] sm:tracking-[0.4em]">Sealing_Shard...</span></>
+                    <><Loader className="w-8 h-8 animate-spin"/><span className="text-sm uppercase tracking-[0.4em]">Sealing_Shard...</span></>
                 ) : (
-                    <><Database className="w-6 h-6 sm:w-8 h-8 group-hover:scale-110 transition-transform"/><span className="text-xs sm:text-sm uppercase tracking-[0.2em] sm:tracking-[0.4em]">Finalize_Ledger_Commit</span></>
+                    <><Database className="w-8 h-8 group-hover:scale-110 transition-transform"/><span className="text-sm uppercase tracking-[0.4em]">Finalize_Ledger_Commit</span></>
                 )}
             </button>
           </div>
@@ -353,30 +356,29 @@ const SubmissionPanel: React.FC<SubmissionPanelProps> = ({ addReport, preselecte
   };
 
   return (
-    <div className="font-mono w-full flex flex-col lg:flex-row gap-8 sm:gap-12 pb-24 md:pb-32">
-      <aside className="w-full lg:w-72 flex-shrink-0">
-          <div className="bg-zinc-900 border border-zinc-800 p-4 sm:p-8 rounded-[1.5rem] sm:rounded-[3rem] lg:sticky lg:top-32 space-y-4 sm:space-y-10 shadow-2xl">
-              <div className="flex lg:flex-col justify-between items-center lg:items-start lg:space-y-2 mb-2 lg:mb-8">
-                  <div>
-                    <p className="text-[8px] sm:text-[9px] font-black text-zinc-600 uppercase tracking-widest">Shard_Fidelity</p>
-                    <div className="flex items-end gap-2 sm:gap-3">
-                        <span className="text-2xl sm:text-4xl font-black tracking-tighter text-white">{fidelityScore}%</span>
-                        <div className={`w-2 h-2 sm:w-3 sm:h-3 rounded-full mb-1 sm:mb-2 ${fidelityScore > 70 ? 'bg-emerald-500 shadow-[0_0_10px_emerald]' : 'bg-amber-500'}`}></div>
-                    </div>
+    <div className="font-mono max-w-5xl mx-auto flex flex-col lg:flex-row gap-12 pb-32">
+      {/* TIMELINE SIDEBAR */}
+      <aside className="lg:w-72 flex-shrink-0 order-2 lg:order-1">
+          <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-[3rem] sticky top-32 space-y-10 shadow-2xl">
+              <div className="space-y-2 mb-8">
+                  <p className="text-[9px] font-black text-zinc-600 uppercase tracking-widest">Shard_Fidelity</p>
+                  <div className="flex items-end gap-3">
+                      <span className="text-4xl font-black tracking-tighter text-white">{fidelityScore}%</span>
+                      <div className={`w-3 h-3 rounded-full mb-2 ${fidelityScore > 70 ? 'bg-emerald-500 shadow-[0_0_10px_emerald]' : 'bg-cyan-500'}`}></div>
                   </div>
-                  <div className="h-1 w-24 sm:w-full bg-zinc-950 rounded-full overflow-hidden mt-1 sm:mt-0">
-                      <div className="h-full bg-amber-500 shadow-[0_0_15px_amber] transition-all duration-1000" style={{ width: `${fidelityScore}%` }}></div>
+                  <div className="h-1 w-full bg-zinc-950 rounded-full overflow-hidden">
+                      <div className="h-full bg-cyan-500 shadow-[0_0_15px_cyan] transition-all duration-1000" style={{ width: `${fidelityScore}%` }}></div>
                   </div>
               </div>
 
-              <div className="hidden lg:block space-y-8 relative">
+              <div className="space-y-8 relative">
                   <div className="absolute left-[17px] top-2 bottom-2 w-0.5 bg-zinc-800"></div>
                   {STEPS.map((step, idx) => {
                       const isActive = activeStepIndex === idx;
                       const isComplete = activeStepIndex > idx;
                       return (
                           <div key={step.id} className={`relative flex items-center space-x-6 transition-all duration-500 ${idx > activeStepIndex ? 'opacity-20' : 'opacity-100'}`}>
-                              <div className={`relative z-10 w-9 h-9 rounded-xl border-2 flex items-center justify-center transition-all ${isComplete ? 'bg-emerald-500 border-emerald-400 text-black' : isActive ? 'bg-amber-500 border-amber-400 text-white shadow-[0_0_15px_rgba(245,158,11,0.4)]' : 'bg-zinc-950 border-zinc-800 text-zinc-600'}`}>
+                              <div className={`relative z-10 w-9 h-9 rounded-xl border-2 flex items-center justify-center transition-all ${isComplete ? 'bg-emerald-500 border-emerald-400 text-black' : isActive ? 'bg-cyan-500 border-cyan-400 text-white shadow-[0_0_15px_rgba(6,182,212,0.4)]' : 'bg-zinc-950 border-zinc-800 text-zinc-600'}`}>
                                   {isComplete ? <CheckCircle className="w-5 h-5" /> : step.icon}
                               </div>
                               <span className={`text-[10px] font-black uppercase tracking-widest ${isActive ? 'text-white' : 'text-zinc-500'}`}>{step.label}</span>
@@ -384,43 +386,26 @@ const SubmissionPanel: React.FC<SubmissionPanelProps> = ({ addReport, preselecte
                       );
                   })}
               </div>
-
-              <div className="lg:hidden flex items-center justify-between text-[10px] font-black uppercase text-zinc-500 tracking-widest px-1">
-                  <span>Block {activeStepIndex + 1} of {STEPS.length}</span>
-                  <span className="text-amber-500">{STEPS[activeStepIndex].label}</span>
-              </div>
           </div>
       </aside>
 
-      <div className="flex-grow">
-          <form onSubmit={handleSubmit} className="bg-zinc-900/40 border-2 border-zinc-800 rounded-[2rem] sm:rounded-[4rem] p-6 sm:p-16 shadow-4xl relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-full h-1 bg-zinc-800">
-                  <div className="h-full bg-amber-600 transition-all duration-1000" style={{ width: `${((activeStepIndex + 1) / STEPS.length) * 100}%` }}></div>
+      {/* CONTENT AREA */}
+      <div className="flex-grow order-1 lg:order-2">
+          <form onSubmit={handleSubmit} className="bg-zinc-900/40 border-2 border-zinc-800 rounded-[4rem] p-10 md:p-16 shadow-4xl relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-1.5 bg-zinc-800">
+                  <div className="h-full bg-cyan-600 transition-all duration-1000" style={{ width: `${((activeStepIndex + 1) / STEPS.length) * 100}%` }}></div>
               </div>
               
-              <div className="min-h-[400px] sm:min-h-[500px] flex flex-col justify-center">
+              <div className="min-h-[500px] flex flex-col justify-center">
                   {renderStepContent()}
               </div>
 
-              <div className="flex mt-12 pt-10 border-t border-zinc-800/50 justify-between gap-4">
-                    <button 
-                      type="button" 
-                      onClick={handlePrev} 
-                      disabled={activeStepIndex === 0} 
-                      className="flex-1 sm:flex-none px-10 py-4 bg-zinc-950 border border-zinc-800 text-zinc-500 hover:text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 disabled:opacity-10"
-                    >
-                      Back
-                    </button>
-                    {activeStepIndex < STEPS.length - 1 && (
-                      <button 
-                        type="button" 
-                        onClick={handleNext} 
-                        className="flex-1 sm:flex-none px-10 py-4 bg-white text-black hover:bg-emerald-400 hover:text-black border border-zinc-300 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 shadow-xl"
-                      >
-                        Next_Phase
-                      </button>
-                    )}
-              </div>
+              {activeStepIndex > 0 && activeStepIndex < STEPS.length - 1 && (
+                <div className="mt-12 pt-10 border-t border-zinc-800/50 flex justify-between">
+                    <button type="button" onClick={handlePrev} className="px-10 py-4 bg-zinc-950 border border-zinc-800 text-zinc-500 hover:text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95">Back</button>
+                    <button type="button" onClick={handleNext} className="px-10 py-4 bg-zinc-900 border border-zinc-700 text-cyan-400 hover:bg-zinc-800 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95">Skip / Next</button>
+                </div>
+              )}
           </form>
       </div>
 

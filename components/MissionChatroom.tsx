@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import type { ChatMessage, Hero } from '../types';
-import { Send, ShieldCheck, User, Zap, Loader, Camera, X, Broadcast, Maximize2, Mic, Play, Square, Volume2, Paperclip, MapPin, FileText } from './icons';
+import { Send, ShieldCheck, User, Zap, Loader, Camera, X, Broadcast, Maximize2, Mic, Play, Square, Volume2, Paperclip, MapPin } from './icons';
 
 interface MissionChatroomProps {
     missionId: string;
@@ -193,28 +193,10 @@ const MissionChatroom: React.FC<MissionChatroomProps> = ({ missionId, messages, 
                         const isSelf = msg.sender === hero.name;
                         if (msg.isSystem) {
                             return (
-                                <div key={msg.id} className="flex flex-col items-center my-6 space-y-2">
+                                <div key={msg.id} className="flex justify-center my-6">
                                     <div className="bg-zinc-900/60 px-6 py-2 rounded-full border border-zinc-800/80 shadow-xl">
-                                        <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest">{msg.title || "SYSTEM_UPDATE"}</span>
+                                        <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest">{msg.text}</span>
                                     </div>
-                                    {msg.pdfUrl && (
-                                        <a 
-                                            href={msg.pdfUrl} 
-                                            download={`DPAL-CERT-${missionId}.pdf`}
-                                            className="group flex items-center space-x-4 p-4 bg-zinc-900 border border-emerald-500/30 rounded-2xl hover:border-emerald-500 transition-all active:scale-95 shadow-lg"
-                                        >
-                                            <div className="p-3 bg-emerald-500/10 rounded-xl group-hover:bg-emerald-500 transition-colors">
-                                                <FileText className="w-5 h-5 text-emerald-400 group-hover:text-black" />
-                                            </div>
-                                            <div className="text-left">
-                                                <p className="text-[10px] font-black uppercase text-zinc-100">{msg.text}</p>
-                                                <p className="text-[8px] font-bold text-zinc-500 uppercase tracking-widest">Tap to download secure artifact</p>
-                                            </div>
-                                        </a>
-                                    )}
-                                    {!msg.pdfUrl && msg.text && (
-                                        <p className="text-[10px] text-zinc-600 font-bold uppercase">{msg.text}</p>
-                                    )}
                                 </div>
                             );
                         }

@@ -57,46 +57,34 @@ export enum SkillLevel {
 
 export type ActionOutcome = 'CLEAN_SUCCESS' | 'PARTIAL_SUCCESS' | 'RISKY_SUCCESS' | 'PARTIAL_CONFIRMATION' | 'INCOMPLETE';
 
-export type FieldPromptType = "confirmation" | "evidence" | "observation" | "safety";
-export type ResponseType = "checkbox" | "photo" | "video" | "text" | "multi-select";
-
-export type ValidationRule =
-  | { rule: "minLength"; value: number }
-  | { rule: "requireOneOf"; value: ("media" | "note")[] };
-
-export type StoredDataTarget = {
-  entity: "tutorial" | "report" | "evidence" | "missionLog" | "riskAssessment";
-  field: string;
-};
-
 export interface FieldPrompt {
   id: string;
-  type: FieldPromptType;
+  type: "confirmation" | "evidence" | "observation" | "safety";
   promptText: string;
   required: boolean;
-  responseType: ResponseType;
-  options?: string[];
-  validationRules?: ValidationRule[];
-  storedAs: StoredDataTarget;
+  responseType: "checkbox" | "photo" | "video" | "text" | "multi-select";
+  options?: string[]; // For multi-select
+  validationRules?: { rule: "minLength" | "fileType" | "geoRequired" | "timeWindow"; value: any }[];
+  storedAs: {
+    entity: "report" | "evidence" | "missionLog" | "riskAssessment";
+    field: string;
+  };
 }
 
 export interface MissionAction {
     id: string;
-    name?: string; 
-    title?: string; 
-    task?: string; 
-    objective?: string; 
-    whyItMatters?: string;
-    icon?: string;
-    priority?: 'High' | 'Medium' | 'Low';
-    isComplete?: boolean;
-    prompts?: FieldPrompt[]; 
-    requiredPrompts?: FieldPrompt[]; 
+    name: string;
+    task: string;
+    whyItMatters: string;
+    icon: string;
+    priority: 'High' | 'Medium' | 'Low';
+    isComplete: boolean;
+    prompts: FieldPrompt[];
     outcome?: ActionOutcome;
     completedAt?: number;
     userResponses?: Record<string, any>;
     evidenceUrls?: string[];
-    impactedSkills?: SkillType[];
+    impactedSkills: SkillType[];
 }
 
 export interface Mission {
@@ -116,20 +104,8 @@ export interface Mission {
   status?: 'active' | 'completed';
   linkedReportId?: string;
   finalReward: { hc: number; legendTokens?: number; nft: { name: string; icon: string } };
-  steps?: any[]; 
-  currentStepIndex?: number;
-  kind?: 'tutorial' | 'standard';
-}
-
-export interface TutorialMission extends Omit<Mission, 'reconActions' | 'mainActions' | 'category' | 'successProbability' | 'phase' | 'finalReward'> {
-  id: string;
-  kind: "tutorial";
-  title: string;
-  subtitle: string;
-  approach: "EVIDENCE_FIRST";
-  difficulty: "STANDARD";
-  goal: "LEARN_SYSTEM";
-  actions: MissionAction[];
+  steps?: any[]; // Legacy
+  currentStepIndex?: number; // Legacy
 }
 
 export enum Archetype {
@@ -143,7 +119,7 @@ export enum Archetype {
 }
 
 export type MissionApproach = 'EVIDENCE_FIRST' | 'COMMUNITY_FIRST' | 'SYSTEMS_FIRST';
-export type MissionGoal = 'STOP_HARM' | 'DOCUMENT_HARM' | 'GET_REMEDY' | 'LEARN_SYSTEM';
+export type MissionGoal = 'STOP_HARM' | 'DOCUMENT_HARM' | 'GET_REMEDY';
 export type SeverityLevel = 'Informational' | 'Standard' | 'Critical' | 'Catastrophic';
 export type SkillType = 'Logic' | 'Forensic' | 'Empathy' | 'Technical' | 'Wisdom' | 'Social' | 'Tactical' | 'Civic' | 'Environmental' | 'Infrastructure';
 export type DirectivePriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
@@ -196,14 +172,11 @@ export interface ChatMessage {
     text?: string;
     imageUrl?: string;
     audioUrl?: string;
-    pdfUrl?: string;
-    title?: string;
     timestamp: number;
     isSystem?: boolean;
     ledgerProof: string; 
     rank?: number;
     avatarUrl?: string;
-    authorId?: string; // Link message to a specific hero node
 }
 
 export interface Report {
@@ -215,12 +188,9 @@ export interface Report {
   timestamp: Date;
   imageUrls?: string[];
   audioUrl?: string;
-  certificatePdfDataUrl?: string;
-  certificatePreviewImageUrl?: string;
   hash: string;
   blockchainRef: string;
   isAuthor?: boolean;
-  authorId?: string; // Database reference to creator
   status: ReportStatus;
   trustScore: number; 
   severity: SeverityLevel;
@@ -230,7 +200,6 @@ export interface Report {
   attachments?: File[];
   isGeneratingNft?: boolean;
   tags?: string[];
-  isTutorial?: boolean;
   evidence?: Array<{
       type: string;
       url: string;
@@ -249,7 +218,7 @@ export interface Report {
   };
 }
 
-export type ReportStatus = 'Submitted' | 'In Review' | 'Resolved' | 'Practice';
+export type ReportStatus = 'Submitted' | 'In Review' | 'Resolved';
 
 export enum NftTheme {
     Fantasy = "Forensic Reconstruction (Fantasy)",
@@ -556,12 +525,4 @@ export interface ArtifactTrait {
     cost: number;
     bonusType: string;
     bonusValue: number;
-}
-
-export interface TutorialOverlayStep {
-  id: string;
-  title: string;
-  body: string;
-  targetSelector: string;
-  placement: "top" | "right" | "bottom" | "left";
 }
