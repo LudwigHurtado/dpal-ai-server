@@ -1,0 +1,86 @@
+import dotenv from "dotenv";
+dotenv.config();
+
+import express, { type Request, type Response, type NextFunction } from "express";
+import cors from "cors";
+import aiRoutes from "./routes/ai.routes";
+
+// Minting
+import { jsonWithRawBody } from "./minting/rawBodyMiddleware";
+import { mintRoute } from "./minting/mintRoute";
+
+// Test mint and asset serving
+import { testMintRoute } from "./minting/testMintRoute";
+import { serveAssetImageRoute } from "./minting/serveAssetImageRoute";
+
+const app = express();
+
+/**
+ * CORS - allow Vercel previews + optional explicit origins
+ */
+const allowedOrigins = new Set<string>();
+if (process.env.FRONTEND_ORIGIN) allowedOrigins.add(process.env.FRONTEND_ORIGIN);
+if (process.env.FRONTEND_ORIGIN_2) allowedOrigins.add(process.env.FRONTEND_ORIGIN_2);
+
+// optional local dev
+allowedOrigins.add("http://localhost:5173");
+allowedOrigins.add("http://localhost:3000");
+
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true);
+      if (allowedOrigins.has(origin)) return cb(null, true);
+      if (origin.endsWith(".vercel.app")) return cb(null, true);
+      return cb(new Error(`CORS blocked: ${origin}`), false);
+    },
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+    optionsSuccessStatus: 204,
+  })
+);
+app.options("*", cors());
+
+/**
+ * Middleware
+ * rawBody capture first (for mint signatures)
+ */
+app.use(jsonWithRawBody("256kb"));
+
+/**
+ * Normal JSON parsing after raw-body capture
+ */
+app.use(express.json({ limit: "256kb" }));
+
+/**
+ * Health check (stable + non-sensitive)
+ */
+app.get("/health", (_req: Request, res: Response) => {
+  res.json({ ok: true, service: "dpal-ai-server", ts: Date.now() });
+});
+
+/**
+ * AI routes
+ */
+app.use("/api/ai", aiRoutes);
+
+/**
+ * Mint routes
+ */
+app.post("/api/mint", (req: Request, res: Response) => void mintRoute(req, res));
+app.post("/api/test/mint", (req: Request, res: Response) => void testMintRoute(req, res));
+app.get("/api/assets/:tokenId.png", (req: Request, res: Response) => void serveAssetImageRoute(req, res));
+
+/**
+ * Error handler (helps diagnose CORS + route errors)
+ */
+app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  console.error(err);
+  res.status(500).json({ ok: false, error: String(err?.message || err) });
+});
+
+/**
+ * Start
+ */
+const PORT = Number(process.env.PORT) || 8080;
+app.listen(PORT, "0.0.0.0", () => console.log(`DPAL server running on port ${PORT}`));
