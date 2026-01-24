@@ -8,6 +8,8 @@ type GeneratePersonaImageInput = {
   archetype: string;
 };
 
+export type { GeneratePersonaImageInput };
+
 export async function generatePersonaImagePng(
   input: GeneratePersonaImageInput
 ): Promise<Buffer> {
@@ -53,4 +55,38 @@ export async function generatePersonaImagePng(
   }
 
   return Buffer.from(String(imgPart.inlineData.data), "base64");
+}
+
+// ✅ TEMP STUB to unblock build (replace body with real Gemini call later)
+export async function runGemini(prompt: string): Promise<string> {
+  if (!GEMINI_API_KEY) {
+    return `Gemini placeholder: ${prompt} (API key not configured)`;
+  }
+
+  const model = String(process.env.GEMINI_MODEL || "gemini-3-flash-preview").trim();
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": GEMINI_API_KEY,
+      },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+      }),
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Gemini API failed: ${text}`);
+    }
+
+    const json: any = await res.json();
+    return json?.candidates?.[0]?.content?.parts?.[0]?.text || `Gemini placeholder: ${prompt}`;
+  } catch (error: any) {
+    console.error("Gemini API error:", error);
+    return `Gemini placeholder: ${prompt}`;
+  }
 }

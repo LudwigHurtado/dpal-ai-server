@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from "express";
-import { runGemini } from "../../services/geminiService";
+import { runGemini } from "../services/gemini.service.js";
 
 console.log("runGemini is:", typeof runGemini);
 const router = Router();

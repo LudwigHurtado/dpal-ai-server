@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import mongoose, { Schema, model } from "mongoose";
-import { generatePersonaImagePng } from "../services/gemini.server";
+import { generatePersonaImagePng } from "../services/gemini.service.js";
 
 const MONGODB_URI = String(process.env.MONGODB_URI || "").trim();
 
