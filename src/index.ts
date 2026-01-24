@@ -1,17 +1,30 @@
+process.on("uncaughtException", (e: any) => {
+  console.error("❌ uncaughtException:", e?.stack || e?.message || e);
+  process.exit(1);
+});
+process.on("unhandledRejection", (e: any) => {
+  console.error("❌ unhandledRejection:", e?.stack || e?.message || e);
+  process.exit(1);
+});
+
 import dotenv from "dotenv";
 dotenv.config();
 
 import express, { type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
-import aiRoutes from "./routes/ai.routes";
+import { connectDb } from "./config/db.js";
+import aiRoutes from "./routes/ai.routes.js";
+import heroRoutes from "./hero.routes.js";
+import nftRoutes from "./routes/nft.routes.js";
+import personaRoutes from "./routes/persona.routes.js";
 
 // Minting
-import { jsonWithRawBody } from "./minting/rawBodyMiddleware";
-import { mintRoute } from "./minting/mintRoute";
+import { jsonWithRawBody } from "./minting/rawBodyMiddleware.js";
+import { mintRoute } from "./minting/mintRoute.js";
 
 // Test mint and asset serving
-import { testMintRoute } from "./minting/testMintRoute";
-import { serveAssetImageRoute } from "./minting/serveAssetImageRoute";
+import { testMintRoute } from "./minting/testMintRoute.js";
+import { serveAssetImageRoute } from "./minting/serveAssetImageRoute.js";
 
 const app = express();
 
@@ -65,7 +78,22 @@ app.get("/health", (_req: Request, res: Response) => {
 app.use("/api/ai", aiRoutes);
 
 /**
- * Mint routes
+ * Hero routes (for profile management)
+ */
+app.use("/api/heroes", heroRoutes);
+
+/**
+ * NFT routes
+ */
+app.use("/api/nft", nftRoutes);
+
+/**
+ * Persona routes
+ */
+app.use("/api/persona", personaRoutes);
+
+/**
+ * Mint routes (legacy/compatibility)
  */
 app.post("/api/mint", (req: Request, res: Response) => void mintRoute(req, res));
 app.post("/api/test/mint", (req: Request, res: Response) => void testMintRoute(req, res));
@@ -80,7 +108,19 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 });
 
 /**
- * Start
+ * Start server with database connection
  */
-const PORT = Number(process.env.PORT) || 8080;
-app.listen(PORT, "0.0.0.0", () => console.log(`DPAL server running on port ${PORT}`));
+async function startServer() {
+  try {
+    await connectDb();
+    const PORT = Number(process.env.PORT) || 8080;
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`✅ DPAL server running on port ${PORT}`);
+    });
+  } catch (error) {
+    console.error("❌ Failed to start server:", error);
+    process.exit(1);
+  }
+}
+
+startServer();
