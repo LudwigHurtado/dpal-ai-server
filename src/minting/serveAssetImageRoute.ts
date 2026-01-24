@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { getAssetPngByTokenId } from "./testMintService.js";
+import { serveAssetImage } from "../services/mint.service.js";
 
 export async function serveAssetImageRoute(req: Request, res: Response) {
   try {
@@ -8,19 +8,19 @@ export async function serveAssetImageRoute(req: Request, res: Response) {
       return res.status(400).json({ error: "tokenId is required" });
     }
 
-    const asset = await getAssetPngByTokenId(tokenId);
+    const { buffer, mimeType } = await serveAssetImage(tokenId);
 
-    if (!asset) {
+    res.setHeader("Content-Type", mimeType);
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    return res.status(200).send(buffer);
+  } catch (e: any) {
+    if (e.message === "SHARD_IDENTIFIER_NOT_FOUND") {
       return res.status(404).json({ error: "asset not found" });
     }
-
-    res.setHeader("Content-Type", "image/png");
-    res.setHeader("Cache-Control", "no-store");
-    return res.status(200).send(asset.imageData);
-  } catch (e: any) {
+    console.error("Serve asset error:", e);
     return res.status(500).json({
-      error: "serve asset failed",
-      message: String(e?.message || e),
+      error: "serve_asset_failed",
+      message: String(e?.message || "Failed to serve asset"),
     });
   }
 }

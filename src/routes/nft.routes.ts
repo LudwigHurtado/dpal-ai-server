@@ -1,124 +1,103 @@
 import { Router, type Request, type Response } from "express";
 import { generatePersonaImagePng } from "../services/gemini.service.js";
-import { mintTestDraft } from "../minting/testMintService.js";
-import crypto from "crypto";
-import mongoose, { Schema, model } from "mongoose";
+import { executeMintFlow, serveAssetImage } from "../services/mint.service.js";
+import { connectDb } from "../config/db.js";
+import { MintReceipt } from "../models/MintReceipt.js";
 
 const router = Router();
-
-const MONGODB_URI = String(process.env.MONGODB_URI || "").trim();
-
-let connected = false;
-async function ensureMongo() {
-  if (connected) return;
-  if (!MONGODB_URI) throw new Error("MONGODB_URI is not set");
-  await mongoose.connect(MONGODB_URI);
-  connected = true;
-}
-
-// NFT Receipt Schema
-type NftReceiptDoc = {
-  userId: string;
-  tokenId: string;
-  prompt: string;
-  theme?: string;
-  category?: string;
-  priceCredits?: number;
-  idempotencyKey?: string;
-  txHash?: string;
-  imageUrl: string;
-  createdAt: Date;
-};
-
-const NftReceiptSchema = new Schema<NftReceiptDoc>({
-  userId: { type: String, required: true, index: true },
-  tokenId: { type: String, required: true, unique: true, index: true },
-  prompt: { type: String, required: true },
-  theme: { type: String },
-  category: { type: String },
-  priceCredits: { type: Number },
-  idempotencyKey: { type: String, index: true },
-  txHash: { type: String },
-  imageUrl: { type: String, required: true },
-  createdAt: { type: Date, default: () => new Date() },
-});
-
-const NftReceipt = model<NftReceiptDoc>("NftReceipt", NftReceiptSchema);
 
 /**
  * POST /api/nft/mint
  * Mint an NFT with the provided details
+ * Implements full wallet/credit system with transactions and audit logging
  */
 router.post("/mint", async (req: Request, res: Response) => {
   try {
-    await ensureMongo();
+    await connectDb();
 
     const { userId, prompt, theme, category, priceCredits, idempotencyKey, nonce, timestamp, traits } = req.body;
 
-    if (!userId || !prompt) {
-      return res.status(400).json({ error: "userId and prompt are required" });
+    // Validation
+    if (!userId || typeof userId !== "string" || userId.trim() === "") {
+      return res.status(400).json({ error: "userId is required and must be a non-empty string" });
     }
 
-    // Check idempotency
-    if (idempotencyKey) {
-      const existing = await NftReceipt.findOne({ userId, idempotencyKey });
-      if (existing) {
-        return res.status(200).json({
-          ok: true,
-          tokenId: existing.tokenId,
-          imageUrl: existing.imageUrl,
-          txHash: existing.txHash,
-          priceCredits: existing.priceCredits,
-          mintedAt: existing.createdAt,
-        });
+    if (!prompt || typeof prompt !== "string" || prompt.trim() === "") {
+      return res.status(400).json({ error: "prompt is required and must be a non-empty string" });
+    }
+
+    if (priceCredits !== undefined) {
+      const credits = Number(priceCredits);
+      if (isNaN(credits) || credits < 0 || !Number.isInteger(credits)) {
+        return res.status(400).json({ error: "priceCredits must be a non-negative integer" });
       }
     }
 
-    // Generate image and create receipt
-    const txHash = `0x${crypto.randomBytes(16).toString("hex")}${Date.now().toString(16)}`;
+    const finalPriceCredits = priceCredits !== undefined ? Number(priceCredits) : 0;
 
-    const testResult = await mintTestDraft({ prompt, archetype: theme || "artifact" });
-
-    // Create receipt
-    const receipt = await NftReceipt.create({
-      userId: String(userId),
-      tokenId: testResult.tokenId,
-      prompt: String(prompt),
-      theme: theme ? String(theme) : undefined,
-      category: category ? String(category) : undefined,
-      priceCredits: priceCredits ? Number(priceCredits) : undefined,
-      idempotencyKey: idempotencyKey ? String(idempotencyKey) : undefined,
-      txHash,
-      imageUrl: testResult.imageUrl,
+    // Execute full mint flow
+    const result = await executeMintFlow(userId, {
+      idempotencyKey,
+      prompt: prompt.trim(),
+      theme,
+      category,
+      priceCredits: finalPriceCredits,
+      nonce,
+      timestamp,
+      traits,
     });
 
-    return res.status(200).json({
-      ok: true,
-      tokenId: receipt.tokenId,
-      imageUrl: receipt.imageUrl,
-      txHash: receipt.txHash,
-      priceCredits: receipt.priceCredits,
-      mintedAt: receipt.createdAt,
-    });
-  } catch (e: any) {
-    console.error("NFT mint error:", e);
+    return res.status(200).json(result);
+  } catch (error: any) {
+    console.error("NFT mint error:", error);
+
+    // Handle specific error types
+    if (error.message === "INSUFFICIENT_RESOURCE_BALANCE") {
+      return res.status(402).json({
+        error: "insufficient_balance",
+        message: "Insufficient credits in wallet to complete mint",
+      });
+    }
+
+    if (error.message === "MINT_ALREADY_IN_PROGRESS") {
+      return res.status(409).json({
+        error: "mint_in_progress",
+        message: "A mint request with this idempotency key is already being processed",
+      });
+    }
+
+    if (error.message === "ORACLE_VISUAL_GENERATION_FAILED" || error.message?.includes("Gemini")) {
+      return res.status(502).json({
+        error: "image_generation_failed",
+        message: "Failed to generate NFT image. Please try again.",
+      });
+    }
+
+    if (error.message?.includes("GEMINI_API_KEY")) {
+      return res.status(500).json({
+        error: "configuration_error",
+        message: "AI service is not properly configured",
+      });
+    }
+
+    // Generic error
     return res.status(500).json({
-      error: "nft mint failed",
-      message: String(e?.message || e),
+      error: "mint_failed",
+      message: String(error?.message || "An unexpected error occurred"),
     });
   }
 });
 
 /**
  * POST /api/nft/generate-image
- * Generate an NFT image from a prompt
+ * Generate an NFT image from a prompt (preview only, doesn't mint)
  */
 router.post("/generate-image", async (req: Request, res: Response) => {
   try {
     const { prompt, theme, operativeId } = req.body;
 
-    if (!prompt) {
-      return res.status(400).json({ error: "prompt is required" });
+    if (!prompt || typeof prompt !== "string" || prompt.trim() === "") {
+      return res.status(400).json({ error: "prompt is required and must be a non-empty string" });
     }
 
     const pngBytes = await generatePersonaImagePng({
@@ -136,8 +115,8 @@ router.post("/generate-image", async (req: Request, res: Response) => {
   } catch (e: any) {
     console.error("NFT image generation error:", e);
     return res.status(500).json({
-      error: "image generation failed",
-      message: String(e?.message || e),
+      error: "image_generation_failed",
+      message: String(e?.message || "Failed to generate image"),
     });
   }
 });
@@ -148,19 +127,19 @@ router.post("/generate-image", async (req: Request, res: Response) => {
  */
 router.get("/receipts", async (req: Request, res: Response) => {
   try {
-    await ensureMongo();
+    await connectDb();
 
     const userId = req.query.userId as string | undefined;
-    const query = userId ? { userId } : {};
+    const query = userId ? { userId: String(userId) } : {};
 
-    const receipts = await NftReceipt.find(query).sort({ createdAt: -1 }).limit(100).lean();
+    const receipts = await MintReceipt.find(query).sort({ createdAt: -1 }).limit(100).lean();
 
     return res.status(200).json(receipts);
   } catch (e: any) {
     console.error("Get receipts error:", e);
     return res.status(500).json({
-      error: "get receipts failed",
-      message: String(e?.message || e),
+      error: "get_receipts_failed",
+      message: String(e?.message || "Failed to retrieve receipts"),
     });
   }
 });

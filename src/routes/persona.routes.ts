@@ -84,9 +84,11 @@ router.post("/generate-details", async (req: Request, res: Response) => {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
     const geminiPrompt = `Persona details for ${archetype}: ${prompt}.`;
+    // This is where the generationConfig for Gemini is constructed, specifying we want a JSON response with name, backstory, combatStyle.
+    // The requestBody is defined immediately after this block
 
     const requestBody = {
-      contents: [{ parts: [{ text: geminiPrompt }] }] },
+      contents: [{ parts: [{ text: geminiPrompt }] }],
       generationConfig: {
         responseMimeType: "application/json",
         responseSchema: {
