@@ -75,48 +75,90 @@ router.post("/generate-details", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "prompt and archetype are required" });
     }
 
-    // Use runGemini to generate persona details
-    const { runGemini } = await import("../services/gemini.service.js");
+    const GEMINI_API_KEY = String(process.env.GEMINI_API_KEY || "").trim();
+    if (!GEMINI_API_KEY) {
+      return res.status(500).json({ error: "GEMINI_API_KEY is not configured" });
+    }
+
+    const model = String(process.env.GEMINI_MODEL || "gemini-3-flash-preview").trim();
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+
+    const geminiPrompt = `Persona details for ${archetype}: ${prompt}.`;
+
+    const requestBody = {
+      contents: [{ parts: [{ text: geminiPrompt }] }] },
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "object",
+          properties: {
+            name: { type: "string" },
+            backstory: { type: "string" },
+            combatStyle: { type: "string" }
+          },
+          required: ["name", "backstory", "combatStyle"]
+        }
+      }
+    };
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": GEMINI_API_KEY,
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Gemini API error:", errorText);
+      return res.status(response.status).json({
+        error: "persona details generation failed",
+        message: `Gemini API error: ${response.status}`,
+      });
+    }
+
+    const json: any = await response.json();
+    const candidates = json?.candidates || [];
     
-    const geminiPrompt = `Generate persona details for a hero character:
+    if (candidates.length === 0) {
+      return res.status(500).json({
+        error: "persona details generation failed",
+        message: "No response from Gemini API",
+      });
+    }
 
-    Prompt: ${prompt}
+    const parts = candidates[0]?.content?.parts || [];
+    const textPart = parts.find((p: any) => p?.text);
 
-    Archetype: ${archetype}
+    if (!textPart?.text) {
+      return res.status(500).json({
+        error: "persona details generation failed",
+        message: "No text in Gemini response",
+      });
+    }
 
-    
-
-    Return a JSON object with:
-
-    - name: A unique hero name
-
-    - backstory: A brief backstory (2-3 sentences)
-
-    - combatStyle: A combat/tactical style description
-
-    
-
-    Format as JSON only.`;
-
-    const response = await runGemini(geminiPrompt);
-    
-    // Try to parse JSON from response
+    // Parse the JSON response
     let details;
     try {
-      details = JSON.parse(response);
-    } catch {
-      // If not JSON, create a structured response
+      details = JSON.parse(textPart.text);
+    } catch (parseError) {
+      console.error("Failed to parse JSON from Gemini:", parseError);
+      // Fallback to structured response
       details = {
         name: `Agent ${archetype}`,
-        backstory: response || `A ${archetype} operative with a mysterious past.`,
+        backstory: textPart.text || `A ${archetype} operative with a mysterious past.`,
         combatStyle: "Tactical"
       };
     }
 
-    return res.status(200).json({
-      ok: true,
-      ...details
-    });
+    // Ensure all required fields are present
+    if (!details.name) details.name = `Agent ${archetype}`;
+    if (!details.backstory) details.backstory = `A ${archetype} operative with a mysterious past.`;
+    if (!details.combatStyle) details.combatStyle = "Tactical";
+
+    return res.status(200).json(details);
 
   } catch (e: any) {
     console.error("Persona details generation error:", e);
