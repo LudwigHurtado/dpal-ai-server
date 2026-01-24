@@ -1,0 +1,22 @@
+node_modules/
+dist/
+.env
+.env.local
+*.log
+.DS_Store
+
+# Frontend files that shouldn't be in backend repo
+components/
+services/
+*.tsx
+!src/**/*.ts
+vite.config.ts
+index.html
+index.tsx
+App.tsx
+constants.ts
+types.ts
+i18n/
+manifest.json
+metadata.json
+vercel.json
