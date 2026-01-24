@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { getAssetPngByTokenId } from "./testMintService";
+import { getAssetPngByTokenId } from "./testMintService.js";
 
 export async function serveAssetImageRoute(req: Request, res: Response) {
   try {
