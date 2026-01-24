@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { mintTestDraft } from "./testMintService";
+import { mintTestDraft } from "./testMintService.js";
 
 export async function testMintRoute(req: Request, res: Response) {
   try {

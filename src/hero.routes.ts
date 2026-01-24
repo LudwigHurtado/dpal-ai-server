@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { Hero } from "../models/Hero.js";
-import { ensureWallet } from "../services/ledger.service.js";
+import { ensureWallet } from "./services/ledger.service.js";
 
 const router = Router();
 
