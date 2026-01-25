@@ -25,6 +25,9 @@ const NftMintingStation: React.FC<NftMintingStationProps> = ({ hero, setHero, on
   const [dpalCategory, setDpalCategory] = useState<Category | ''>('');
   const [selectedTraits, setSelectedTraits] = useState<string[]>([]);
   
+  
+  const apiBase = (import.meta as any).env?.VITE_API_BASE || 'https://web-production-a27b.up.railway.app';
+  
   // Concept & Mint State
   const [concepts, setConcepts] = useState<string[]>([]);
   const [selectedConcept, setSelectedConcept] = useState<string | null>(null);

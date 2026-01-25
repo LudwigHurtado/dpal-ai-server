@@ -15,7 +15,7 @@ const NftCard: React.FC<NftCardProps> = ({ report, characterNft }) => {
     const cardRef = useRef<HTMLDivElement>(null);
     const [showQr, setShowQr] = useState(false);
     const { t } = useTranslations();
-
+    const apiBase = (import.meta as any).env?.VITE_API_BASE || 'https://web-production-a27b.up.railway.app';
     const nft = report?.earnedNft;
     const isCharacter = !!characterNft;
     const displayData = isCharacter ? characterNft : nft;

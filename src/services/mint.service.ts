@@ -2,10 +2,7 @@
  * @file Mint Service
  * Handles the full NFT minting flow with wallet checks, transactions, and audit logging.
  */
-
 import mongoose from "mongoose";
-import { Buffer } from "buffer";
-import { GoogleGenAI } from "@google/genai";
 import { CreditWallet } from "../models/CreditWallet.js";
 import { CreditLedger } from "../models/CreditLedger.js";
 import { MintRequest } from "../models/MintRequest.js";
@@ -13,13 +10,8 @@ import { MintReceipt } from "../models/MintReceipt.js";
 import { NftAsset } from "../models/NftAsset.js";
 import { AuditEvent } from "../models/AuditEvent.js";
 import { connectDb } from "../config/db.js";
+import { generatePersonaImagePng } from "./gemini.service.js";
 
-const GEMINI_API_KEY = String(process.env.GEMINI_API_KEY || "").trim();
-
-/**
- * Executes the full NFT minting transaction on the server.
- * Includes wallet balance checking, credit locking, transaction management, and audit logging.
- */
 export async function executeMintFlow(userId: string, payload: any) {
   const { idempotencyKey, prompt, theme, category, priceCredits, nonce, timestamp, traits } = payload;
 
@@ -99,41 +91,13 @@ export async function executeMintFlow(userId: string, payload: any) {
     // 5. Generate Visual Telemetry (Gemini Oracle)
     console.log(`[BACKEND] Invoking Gemini Oracle for: ${prompt}`);
 
-    if (!GEMINI_API_KEY) {
-      throw new Error("GEMINI_API_KEY is not configured");
-    }
+    // (No API key required here; handled inside generatePersonaImagePng if needed.)
 
-    const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
-    const imageModel = String(process.env.GEMINI_IMAGE_MODEL || "gemini-3-pro-image-preview").trim();
-    
-    const imageResponse = await ai.models.generateContent({
-      model: imageModel,
-      contents: {
-        parts: [
-          {
-            text: `A futuristic holographic accountability artifact for a decentralized ledger. Concept: ${prompt}. Visual Theme: ${theme || "artifact"}. Category: ${category || "general"}. Cinematic lighting, 8k resolution, detailed glass and metal surfaces.`,
-          },
-        ],
-      },
-      config: {
-        imageConfig: { aspectRatio: "1:1" },
-      },
+    // Use Gemini Oracle to generate PNG image for NFT
+    const pngBytes = await generatePersonaImagePng({
+      description: `A futuristic holographic accountability artifact for a decentralized ledger. Concept: ${prompt}. Visual Theme: ${theme || "artifact"}. Category: ${category || "general"}. Cinematic lighting, 8k resolution, detailed glass and metal surfaces.`,
+      archetype: theme || "artifact",
     });
-
-    let base64Image = "";
-    const candidates = imageResponse.candidates;
-    if (candidates && candidates.length > 0 && candidates[0]?.content?.parts) {
-      for (const part of candidates[0].content.parts) {
-        if (part.inlineData?.data) {
-          base64Image = part.inlineData.data;
-          break;
-        }
-      }
-    }
-
-    if (!base64Image) {
-      throw new Error("ORACLE_VISUAL_GENERATION_FAILED");
-    }
 
     // 6. Generate Shard Identifiers
     const tokenId = `DPAL-${Date.now()}-${Math.floor(Math.random() * 9999).toString().padStart(4, "0")}`;
@@ -151,7 +115,7 @@ export async function executeMintFlow(userId: string, payload: any) {
           attributes: traits || [],
           createdByUserId: userId,
           status: "MINTED",
-          imageData: Buffer.from(base64Image, "base64"),
+          imageData: pngBytes,
         },
       ],
       { session }

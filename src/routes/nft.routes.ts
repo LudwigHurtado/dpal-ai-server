@@ -7,6 +7,14 @@ import { MintReceipt } from "../models/MintReceipt.js";
 const router = Router();
 
 /**
+ * GET /api/nft/test
+ * Test route to verify NFT routes are loaded
+ */
+router.get("/test", (_req: Request, res: Response) => {
+  res.json({ ok: true, message: "NFT routes are loaded and working", ts: Date.now() });
+});
+
+/**
  * POST /api/nft/mint
  * Mint an NFT with the provided details
  * Implements full wallet/credit system with transactions and audit logging

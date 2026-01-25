@@ -23,7 +23,7 @@ const CollectionCodex: React.FC<CollectionCodexProps> = ({ reports, hero, onRetu
             .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()),
         [reports]
     );
-
+    const apiBase = (import.meta as any).env?.VITE_API_BASE || 'https://web-production-a27b.up.railway.app';
     const badgeNfts = useMemo(() =>
         reports
             .filter(r => r.isAuthor && r.earnedNft && r.earnedNft.source === 'badge')
