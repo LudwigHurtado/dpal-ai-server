@@ -13,103 +13,150 @@ dotenv.config();
 import express, { type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
 import { connectDb } from "./config/db.js";
+
 import aiRoutes from "./routes/ai.routes.js";
 import heroRoutes from "./hero.routes.js";
 import nftRoutes from "./routes/nft.routes.js";
 import personaRoutes from "./routes/persona.routes.js";
 
-// Minting
-import { jsonWithRawBody } from "./minting/rawBodyMiddleware.js";
 import { mintRoute } from "./minting/mintRoute.js";
-
-// Test mint and asset serving
 import { testMintRoute } from "./minting/testMintRoute.js";
 import { serveAssetImageRoute } from "./minting/serveAssetImageRoute.js";
 
 const app = express();
 
+// Railway / proxies
+app.set("trust proxy", 1);
+app.disable("x-powered-by");
+
 /**
- * CORS - allow Vercel previews + optional explicit origins
+ * Helper: allow comma-separated origins (optional)
+ * Example:
+ *   FRONTEND_ORIGINS="https://app.example.com,https://preview.example.com"
+ */
+function addOriginsFromEnv(set: Set<string>, envKey: string) {
+  const raw = process.env[envKey];
+  if (!raw) return;
+  raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .forEach((o) => set.add(o));
+}
+
+/**
+ * CORS allowlist
  */
 const allowedOrigins = new Set<string>();
+
 if (process.env.FRONTEND_ORIGIN) allowedOrigins.add(process.env.FRONTEND_ORIGIN);
 if (process.env.FRONTEND_ORIGIN_2) allowedOrigins.add(process.env.FRONTEND_ORIGIN_2);
+addOriginsFromEnv(allowedOrigins, "FRONTEND_ORIGINS");
 
-// optional local dev
+// local dev
 allowedOrigins.add("http://localhost:5173");
 allowedOrigins.add("http://localhost:3000");
 
+/**
+ * IMPORTANT: Make /health testable from anywhere (your test panel runs in-browser)
+ * Put this BEFORE restrictive CORS middleware.
+ */
+app.options("/health", cors({ origin: true }));
+app.get(
+  "/health",
+  cors({ origin: true }),
+  (_req: Request, res: Response) => {
+    res.json({
+      ok: true,
+      service: "dpal-ai-server",
+      version: "2026-01-25-v3",
+      ts: Date.now(),
+    });
+  }
+);
+
+/**
+ * Restrictive CORS for the API
+ */
+const corsOptions: cors.CorsOptions = {
+  origin: (origin, cb) => {
+    // server-to-server / curl / Railway internal requests
+    if (!origin) return cb(null, true);
+
+    // exact matches (custom domains, previews you list explicitly)
+    if (allowedOrigins.has(origin)) return cb(null, true);
+
+    // allow Vercel preview/prod domains
+    // (origin will look like "https://your-app.vercel.app")
+    try {
+      const u = new URL(origin);
+      if (u.hostname.endsWith(".vercel.app")) return cb(null, true);
+    } catch {
+      // ignore invalid origin
+    }
+
+    return cb(new Error(`CORS blocked: ${origin}`), false);
+  },
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "X-Requested-With",
+    "X-Request-Id",
+  ],
+  credentials: false,
+  optionsSuccessStatus: 204,
+};
+
+// Apply CORS to everything after /health
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
+
+/**
+ * Body parser (single pass) + raw body capture for mint signatures
+ * - keeps req.rawBody as Buffer
+ */
 app.use(
-  cors({
-    origin: (origin, cb) => {
-      if (!origin) return cb(null, true);
-      if (allowedOrigins.has(origin)) return cb(null, true);
-      if (origin.endsWith(".vercel.app")) return cb(null, true);
-      return cb(new Error(`CORS blocked: ${origin}`), false);
+  express.json({
+    limit: "256kb",
+    verify: (req: any, _res, buf) => {
+      req.rawBody = buf; // Buffer
     },
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
-    optionsSuccessStatus: 204,
   })
 );
-app.options("*", cors());
 
 /**
- * Middleware
- * rawBody capture first (for mint signatures)
+ * Routes
  */
-app.use(jsonWithRawBody("256kb"));
+app.use("/api/ai", aiRoutes);
+app.use("/api/heroes", heroRoutes);
+app.use("/api/nft", nftRoutes);
+app.use("/api/persona", personaRoutes);
+
+// Legacy/compat mint endpoints
+app.post("/api/mint", (req: Request, res: Response) => void mintRoute(req, res));
+app.post("/api/test/mint", (req: Request, res: Response) => void testMintRoute(req, res));
+app.get("/api/assets/:tokenId.png", (req: Request, res: Response) =>
+  void serveAssetImageRoute(req, res)
+);
 
 /**
- * Normal JSON parsing after raw-body capture
+ * 404 helper (so you SEE the mistake instead of silent black screen)
  */
-app.use(express.json({ limit: "256kb" }));
-
-/**
- * Health check (stable + non-sensitive)
- */
-app.get("/health", (_req: Request, res: Response) => {
-  res.json({ 
-    ok: true, 
-    service: "dpal-ai-server", 
-    version: "2026-01-24-v2",
-    ts: Date.now() 
-  });
+app.use((_req: Request, res: Response) => {
+  res.status(404).json({ ok: false, error: "Not Found" });
 });
 
 /**
- * AI routes
- */
-app.use("/api/ai", aiRoutes);
-
-/**
- * Hero routes (for profile management)
- */
-app.use("/api/heroes", heroRoutes);
-
-/**
- * NFT routes
- */
-app.use("/api/nft", nftRoutes);
-
-/**
- * Persona routes
- */
-app.use("/api/persona", personaRoutes);
-
-/**
- * Mint routes (legacy/compatibility)
- */
-app.post("/api/mint", (req: Request, res: Response) => void mintRoute(req, res));
-app.post("/api/test/mint", (req: Request, res: Response) => void testMintRoute(req, res));
-app.get("/api/assets/:tokenId.png", (req: Request, res: Response) => void serveAssetImageRoute(req, res));
-
-/**
- * Error handler (helps diagnose CORS + route errors)
+ * Error handler (CORS + route errors)
  */
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-  console.error(err);
-  res.status(500).json({ ok: false, error: String(err?.message || err) });
+  const msg = String(err?.message || err || "Unknown error");
+  console.error("❌ Error:", msg);
+
+  // If it's our CORS error, return 403 (more accurate than 500)
+  const status = msg.startsWith("CORS blocked:") ? 403 : 500;
+  res.status(status).json({ ok: false, error: msg });
 });
 
 /**
@@ -119,8 +166,10 @@ async function startServer() {
   try {
     await connectDb();
     const PORT = Number(process.env.PORT) || 8080;
+
     app.listen(PORT, "0.0.0.0", () => {
       console.log(`✅ DPAL server running on port ${PORT}`);
+      console.log(`   /health -> ready`);
     });
   } catch (error) {
     console.error("❌ Failed to start server:", error);
