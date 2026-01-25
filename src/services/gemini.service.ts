@@ -114,7 +114,7 @@ export async function generatePersonaImagePng(
       throw new Error(`Gemini image generation failed: ${errorMsg}`);
     }
 
-    const json: GeminiResponse = await response.json();
+    const json = await response.json() as GeminiResponse;
     const candidates = json?.candidates || [];
     
     if (candidates.length === 0) {
@@ -184,7 +184,7 @@ export async function runGemini(prompt: string): Promise<string> {
       return `Gemini placeholder: ${prompt}`;
     }
 
-    const json: GeminiResponse = await response.json();
+    const json = await response.json() as GeminiResponse;
     const candidates = json?.candidates || [];
     
     if (candidates.length === 0) {

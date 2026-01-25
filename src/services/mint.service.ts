@@ -121,10 +121,13 @@ export async function executeMintFlow(userId: string, payload: any) {
     });
 
     let base64Image = "";
-    for (const part of imageResponse.candidates[0].content.parts) {
-      if (part.inlineData) {
-        base64Image = part.inlineData.data;
-        break;
+    const candidates = imageResponse.candidates;
+    if (candidates && candidates.length > 0 && candidates[0]?.content?.parts) {
+      for (const part of candidates[0].content.parts) {
+        if (part.inlineData?.data) {
+          base64Image = part.inlineData.data;
+          break;
+        }
       }
     }
 

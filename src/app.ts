@@ -2,9 +2,9 @@ import express from "express";
 import { corsMw } from "./middleware/cors.js";
 import { errorMw } from "./middleware/error.js";
 
-import heroRoutes from "./routes/hero.routes.js";
+import heroRoutes from "./hero.routes.js";
 import walletRoutes from "./routes/wallet.routes.js";
-import ledgerRoutes from "./routes/ledger.routes.js";
+// ledgerRoutes removed - file is empty and not used
 
 export function createApp() {
   const app = express();
@@ -18,7 +18,7 @@ export function createApp() {
 
   app.use("/api/heroes", heroRoutes);
   app.use("/api/wallet", walletRoutes);
-  app.use("/api/ledger", ledgerRoutes);
+  // app.use("/api/ledger", ledgerRoutes); // Commented out - ledger routes not implemented
 
 
 
