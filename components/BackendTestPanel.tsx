@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Check, X, Loader, AlertCircle, Server, Database, Key, Globe } from './icons';
 
 interface TestResult {
@@ -8,12 +8,20 @@ interface TestResult {
   details?: any;
 }
 
+// Helper to normalize URLs (remove trailing slashes)
+const normalizeUrl = (url: string): string => {
+  return url.trim().replace(/\/+$/, '');
+};
+
 const BackendTestPanel: React.FC = () => {
   const [isTesting, setIsTesting] = useState(false);
   const [results, setResults] = useState<TestResult[]>([]);
-  const [apiBase, setApiBase] = useState(
+  const [apiBaseRaw, setApiBaseRaw] = useState(
     (import.meta as any).env?.VITE_API_BASE || 'https://web-production-a27b.up.railway.app'
   );
+
+  // Normalize the URL (remove trailing slashes)
+  const apiBase = useMemo(() => normalizeUrl(apiBaseRaw), [apiBaseRaw]);
 
   const runTests = async () => {
     setIsTesting(true);
@@ -49,9 +57,7 @@ const BackendTestPanel: React.FC = () => {
     setResults([...testResults]);
 
     try {
-      // Ensure no double slashes
-      const baseUrl = apiBase.endsWith('/') ? apiBase.slice(0, -1) : apiBase;
-      const healthUrl = `${baseUrl}/health`;
+      const healthUrl = `${apiBase}/health`;
       const healthResponse = await fetch(healthUrl, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
@@ -100,8 +106,7 @@ const BackendTestPanel: React.FC = () => {
     setResults([...testResults]);
 
     try {
-      const baseUrl = apiBase.endsWith('/') ? apiBase.slice(0, -1) : apiBase;
-      const corsTestUrl = `${baseUrl}/health`;
+      const corsTestUrl = `${apiBase}/health`;
       const corsResponse = await fetch(corsTestUrl, {
         method: 'OPTIONS',
         headers: {
@@ -155,8 +160,7 @@ const BackendTestPanel: React.FC = () => {
     setResults([...testResults]);
 
     try {
-      const baseUrl = apiBase.endsWith('/') ? apiBase.slice(0, -1) : apiBase;
-      const personaUrl = `${baseUrl}/api/persona/generate-details`;
+      const personaUrl = `${apiBase}/api/persona/generate-details`;
       const personaResponse = await fetch(personaUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -210,8 +214,7 @@ const BackendTestPanel: React.FC = () => {
     setResults([...testResults]);
 
     try {
-      const baseUrl = apiBase.endsWith('/') ? apiBase.slice(0, -1) : apiBase;
-      const nftUrl = `${baseUrl}/api/nft/generate-image`;
+      const nftUrl = `${apiBase}/api/nft/generate-image`;
       const nftResponse = await fetch(nftUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -278,8 +281,9 @@ const BackendTestPanel: React.FC = () => {
         <label className="block text-sm text-zinc-400 mb-2 font-medium">Backend URL:</label>
         <input
           type="text"
-          value={apiBase}
-          onChange={(e) => setApiBase(e.target.value)}
+          value={apiBaseRaw}
+          onChange={(e) => setApiBaseRaw(e.target.value)}
+          onBlur={(e) => setApiBaseRaw(normalizeUrl(e.target.value))}
           className="w-full bg-zinc-900 border border-zinc-700 rounded px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           placeholder="https://your-backend.railway.app"
         />
