@@ -1,5 +1,3 @@
-
-
 import React, { useMemo, useState } from 'react';
 import type { Report, CharacterNft, Hero } from '../types';
 import { useTranslations } from '../i18n';
@@ -136,9 +134,9 @@ const CollectionCodex: React.FC<CollectionCodexProps> = ({ reports, hero, onRetu
             )}
 
             {activeTab === 'legends' && (
-                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                    {LEGENDS_OF_THE_LEDGER_NFTS.map((nft) => (
-                        <NftCard key={nft.title} characterNft={nft} />
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    {LEGENDS_OF_THE_LEDGER_NFTS.map((nft, idx) => (
+                        <NftCard key={nft?.title ?? idx} characterNft={nft} />
                     ))}
                 </div>
             )}

@@ -83,11 +83,11 @@ const NftCard: React.FC<NftCardProps> = ({ report, characterNft }) => {
                     <div className="bg-black/40 backdrop-blur-sm rounded-md p-2 text-xs font-mono">
                         <div className="flex justify-between text-gray-300">
                             <span>Block #</span>
-                            <span className="text-white">#{nft.blockNumber}</span>
+                            <span className="text-white">#{nft?.blockNumber ?? 'N/A'}</span>
                         </div>
                         <div className="flex justify-between text-gray-300">
                             <span>Tx Hash</span>
-                            <span className="text-white truncate">{nft.txHash.substring(0, 10)}...</span>
+                            <span className="text-white truncate">{nft?.txHash ? `${nft.txHash.substring(0, 10)}...` : 'N/A'}</span>
                         </div>
                     </div>
                 </div>
