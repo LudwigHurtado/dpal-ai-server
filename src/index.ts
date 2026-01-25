@@ -69,7 +69,12 @@ app.use(express.json({ limit: "256kb" }));
  * Health check (stable + non-sensitive)
  */
 app.get("/health", (_req: Request, res: Response) => {
-  res.json({ ok: true, service: "dpal-ai-server", ts: Date.now() });
+  res.json({ 
+    ok: true, 
+    service: "dpal-ai-server", 
+    version: "2026-01-24-v2",
+    ts: Date.now() 
+  });
 });
 
 /**
