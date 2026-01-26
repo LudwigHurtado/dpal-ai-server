@@ -18,6 +18,7 @@ import aiRoutes from "./routes/ai.routes.js";
 import heroRoutes from "./hero.routes.js";
 import nftRoutes from "./routes/nft.routes.js";
 import personaRoutes from "./routes/persona.routes.js";
+import storeRoutes from "./routes/store.routes.js";
 
 import { mintRoute } from "./minting/mintRoute.js";
 import { testMintRoute } from "./minting/testMintRoute.js";
@@ -132,6 +133,7 @@ app.use("/api/ai", aiRoutes);
 app.use("/api/heroes", heroRoutes);
 app.use("/api/nft", nftRoutes);
 app.use("/api/persona", personaRoutes);
+app.use("/api/store", storeRoutes);
 
 // Legacy/compat mint endpoints
 app.post("/api/mint", (req: Request, res: Response) => void mintRoute(req, res));

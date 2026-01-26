@@ -64,10 +64,13 @@ async function apiRequest<T>(
         try {
           errorData = await response.json() as { error?: string; code?: string };
         } catch {
-          // already has fallback above
+          // fallback is already set above
         }
+        const errorMessage = errorData.error || `HTTP ${response.status}: ${response.statusText}`;
+        // Always include the URL in the error message
+        const fullMessage = `${errorMessage} (URL: ${url})`;
         throw new ApiError(
-          errorData.error || `HTTP ${response.status}: ${response.statusText}`,
+          fullMessage,
           response.status,
           errorData.code
         );
@@ -85,12 +88,28 @@ async function apiRequest<T>(
       }
       if (error.name === 'AbortError') {
         // Don't retry on timeout - throw immediately
-        throw new ApiError('Request timeout. Please check your connection.', 408, 'TIMEOUT');
+        throw new ApiError(
+          `Request timeout. Please check your connection. (URL: ${url})`,
+          408,
+          'TIMEOUT'
+        );
       }
 
       // If this is the last attempt, throw the error
       if (attempt >= API_CONFIG.retries) {
-        throw lastError || new ApiError('Network request failed after retries');
+        if (lastError instanceof Error) {
+          // If we have a last error, rethrow, but guarantee URL inclusion
+          if (lastError instanceof ApiError && !lastError.message.includes(url)) {
+            throw new ApiError(
+              `${lastError.message} (URL: ${url})`,
+              (lastError as ApiError).status,
+              (lastError as ApiError).code
+            );
+          }
+          throw lastError;
+        } else {
+          throw new ApiError(`Network request failed after retries. (URL: ${url})`);
+        }
       }
 
       // Wait before retry (exponential backoff)
@@ -98,7 +117,7 @@ async function apiRequest<T>(
     }
   }
 
-  throw lastError || new ApiError('Network request failed');
+  throw lastError || new ApiError(`Network request failed (URL: ${url})`);
 }
 
 /**
@@ -188,7 +207,8 @@ export async function purchaseIapPack(params: {
  */
 export async function checkApiHealth(): Promise<boolean> {
   try {
-    const response = await fetch(getApiUrl('/health'), {
+    const url = getApiUrl('/health');
+    const response = await fetch(url, {
       method: 'GET',
       signal: AbortSignal.timeout(5000),
     });
