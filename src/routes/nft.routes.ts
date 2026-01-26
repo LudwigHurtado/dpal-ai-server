@@ -3,11 +3,11 @@ import { generatePersonaImagePng } from "../services/gemini.service.js";
 import { serveAssetImage } from "../services/mint.service.js";
 import { connectDb } from "../config/db.js";
 import { MintReceipt } from "../models/MintReceipt.js";
-import { Wallet } from "../models/Wallet.js"; // Assumes a Wallet model exists
-import { LedgerEntry } from "../models/LedgerEntry.js"; // Assumes a LedgerEntry model exists
-import { AuditEvent } from "../models/AuditEvent.js"; // Assumes an AuditEvent model exists
+import { CreditWallet } from "../models/CreditWallet.js";
+import { CreditLedger } from "../models/CreditLedger.js";
+import { AuditEvent } from "../models/AuditEvent.js";
+import { NftAsset } from "../models/NftAsset.js";
 import mongoose from "mongoose";
-import { v4 as uuidv4 } from "uuid";
 
 const router = Router();
 
@@ -56,7 +56,7 @@ router.post("/mint", async (req: Request, res: Response) => {
 
     const finalPriceCredits = priceCredits !== undefined ? Number(priceCredits) : 0;
     // Normalize idempotency key
-    const idemKey = idempotencyKey || uuidv4();
+    const idemKey = idempotencyKey || `mint-${userId}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
     // === Check for in-progress or duplicate mint (idempotency) ===
     const existingReceipt = await MintReceipt.findOne({ userId, idempotencyKey: idemKey }).session(session);
@@ -71,23 +71,24 @@ router.post("/mint", async (req: Request, res: Response) => {
     }
 
     // === Wallet balance and "locking" ===
-    let wallet = await Wallet.findOne({ userId }).session(session);
+    // Ensure wallet exists
+    await CreditWallet.updateOne(
+      { userId },
+      { $setOnInsert: { balance: 10000, lockedBalance: 0 } },
+      { upsert: true, session }
+    );
+
+    // Check balance and lock credits
+    const wallet = await CreditWallet.findOneAndUpdate(
+      { userId, balance: { $gte: finalPriceCredits }, lockedBalance: 0 },
+      {
+        $inc: { balance: -finalPriceCredits, lockedBalance: finalPriceCredits },
+        $set: { updatedAt: new Date() }
+      },
+      { session, new: true }
+    );
+
     if (!wallet) {
-      // Always auto-create wallet for new users
-      wallet = new Wallet({ userId, balance: 0 });
-      await wallet.save({ session });
-    }
-
-    if (wallet.locked) {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(423).json({
-        error: "wallet_locked",
-        message: "Wallet is currently locked for an operation"
-      });
-    }
-
-    if (wallet.balance < finalPriceCredits) {
       await session.abortTransaction();
       session.endSession();
       return res.status(402).json({
@@ -96,63 +97,58 @@ router.post("/mint", async (req: Request, res: Response) => {
       });
     }
 
-    // === Lock Credits ===
-    wallet.locked = true;
-    wallet.lockReason = `mint-nft:${idemKey}`;
-    await wallet.save({ session });
-
     // === Ledger Entry: DEBIT (PENDING) ===
-    const ledgerEntry = await LedgerEntry.create([{
+    const ledgerEntry = await CreditLedger.create([{
       userId,
-      amount: -finalPriceCredits,
-      type: "MINT_DEBIT_PENDING",
-      memo: "Mint NFT - pending",
-      refId: idemKey,
-      status: "pending"
+      type: "CREDIT_LOCK",
+      amount: finalPriceCredits,
+      direction: "DEBIT",
+      referenceId: idemKey,
+      idempotencyKey: `lock-${idemKey}`,
+      meta: { prompt, theme, category }
     }], { session });
 
     // === Audit Event: mint initiated ===
     await AuditEvent.create([{
-      userId,
-      eventType: "NFT_MINT_INITIATED",
-      eventSource: "nft.routes.ts",
-      details: {
+      actorUserId: userId,
+      action: "NFT_MINT_INITIATED",
+      entityType: "MintRequest",
+      entityId: idemKey,
+      hash: `mint-${idemKey}`,
+      meta: {
         prompt: prompt,
         theme,
         category,
         priceCredits: finalPriceCredits,
         idempotencyKey: idemKey,
         traits
-      },
-      refId: idemKey,
-      timestamp: new Date()
+      }
     }], { session });
     
     // === (Try) Mint Logic ===
     // Let's call image generation and then record mint
-    let imageUrl, pngBytes, nftId;
+    let base64: string, tokenId: string;
     try {
-      pngBytes = await generatePersonaImagePng({
+      const pngBytes = await generatePersonaImagePng({
         description: prompt.trim(),
-        archetype: String(theme || "artifact"),
-        traits
+        archetype: String(theme || "artifact")
       });
-      const base64 = pngBytes.toString("base64");
-      imageUrl = `data:image/png;base64,${base64}`;
-      nftId = `nft-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      base64 = pngBytes.toString("base64");
+      tokenId = `DPAL-${Date.now()}-${Math.floor(Math.random() * 9999).toString().padStart(4, '0')}`;
     } catch (err) {
-      // === Rollback debit, unlock wallet, audit failure ===
-      await LedgerEntry.updateOne({ _id: ledgerEntry[0]._id }, { $set: { status: "rollback", memo: "Mint failed, rollback debit" } }, { session });
-      wallet.locked = false;
-      wallet.lockReason = null;
-      await wallet.save({ session });
+      // === Rollback: unlock wallet, audit failure ===
+      await CreditWallet.updateOne(
+        { userId },
+        { $inc: { balance: finalPriceCredits, lockedBalance: -finalPriceCredits } },
+        { session }
+      );
       await AuditEvent.create([{
-        userId,
-        eventType: "NFT_MINT_IMAGE_FAILED",
-        eventSource: "nft.routes.ts",
-        details: { prompt, error: String(err) },
-        refId: idemKey,
-        timestamp: new Date()
+        actorUserId: userId,
+        action: "NFT_MINT_IMAGE_FAILED",
+        entityType: "MintRequest",
+        entityId: idemKey,
+        hash: `mint-failed-${idemKey}`,
+        meta: { prompt, error: String(err) }
       }], { session });
       await session.abortTransaction();
       session.endSession();
@@ -163,44 +159,78 @@ router.post("/mint", async (req: Request, res: Response) => {
       });
     }
 
-    // === Ledger Entry: DEBIT (COMPLETED) + update ===
-    await LedgerEntry.updateOne({ _id: ledgerEntry[0]._id }, { $set: { status: "completed", memo: "Mint NFT - completed" } }, { session });
+    // === Save NFT Asset ===
+    const nftAsset = await NftAsset.create([{
+      tokenId,
+      collectionId: 'GENESIS_01',
+      chain: 'DPAL_INTERNAL',
+      metadataUri: `dpal://metadata/${tokenId}`,
+      imageUri: `/api/assets/${tokenId}.png`,
+      attributes: traits || [],
+      createdByUserId: userId,
+      status: 'MINTED',
+      imageData: Buffer.from(base64, 'base64')
+    }], { session });
 
-    // === Wallet balance deduction (+ unlock wallet) ===
-    wallet.balance -= finalPriceCredits;
-    wallet.locked = false;
-    wallet.lockReason = null;
-    await wallet.save({ session });
+    // === Create MintRequest for receipt reference ===
+    const { MintRequest } = await import("../models/MintRequest.js");
+    const mintRequest = await MintRequest.create([{
+      userId,
+      idempotencyKey: idemKey,
+      assetDraftId: tokenId,
+      collectionId: 'GENESIS_01',
+      priceCredits: finalPriceCredits,
+      chain: 'DPAL_INTERNAL',
+      nonce: nonce || Math.random().toString(36).slice(2, 15),
+      timestamp: timestamp || Date.now(),
+      status: 'COMPLETED'
+    }], { session });
+
+    // === Complete ledger entry (spend) ===
+    const spendLedgerEntry = await CreditLedger.create([{
+      userId,
+      type: "CREDIT_SPEND",
+      amount: finalPriceCredits,
+      direction: "DEBIT",
+      referenceId: mintRequest[0]._id.toString(),
+      idempotencyKey: `spend-${idemKey}`,
+      meta: { prompt, theme, category }
+    }], { session });
+
+    // Unlock wallet (deduct from lockedBalance)
+    await CreditWallet.updateOne(
+      { userId },
+      { $inc: { lockedBalance: -finalPriceCredits } },
+      { session }
+    );
 
     // === Mint Receipt ===
     const mintReceipt = await MintReceipt.create([{
+      mintRequestId: mintRequest[0]._id,
       userId,
-      nftId,
-      prompt: prompt.trim(),
-      imageUrl,
-      theme, 
-      category,
-      traits,
-      creditsSpent: finalPriceCredits,
-      idempotencyKey: idemKey,
-      createdAt: new Date(),
+      tokenId,
+      txHash: `0x${Math.random().toString(16).slice(2)}${Date.now().toString(16)}`,
+      chain: 'DPAL_INTERNAL',
+      metadataUri: nftAsset[0].metadataUri,
+      priceCredits: finalPriceCredits,
+      ledgerEntryId: spendLedgerEntry[0]._id,
     }], { session });
 
     // === Ledger Entry: CREDIT (offset back if failed, not needed here) ===
 
     // === Audit Event: MINT_SUCCESS ===
     await AuditEvent.create([{
-      userId,
-      eventType: "NFT_MINT_SUCCESS",
-      eventSource: "nft.routes.ts",
-      details: {
-        nftId,
+      actorUserId: userId,
+      action: "NFT_MINT",
+      entityType: "NftAsset",
+      entityId: nftAsset[0]._id.toString(),
+      hash: mintReceipt[0].txHash,
+      meta: {
+        tokenId,
         prompt: prompt.trim(),
-        creditsSpent: finalPriceCredits,
+        priceCredits: finalPriceCredits,
         receiptId: mintReceipt[0]._id
-      },
-      refId: idemKey,
-      timestamp: new Date()
+      }
     }], { session });
 
     await session.commitTransaction();
@@ -208,8 +238,11 @@ router.post("/mint", async (req: Request, res: Response) => {
 
     return res.status(200).json({
       ok: true,
-      receipt: mintReceipt[0],
-      imageUrl
+      tokenId,
+      imageUrl: `/api/assets/${tokenId}.png`,
+      txHash: mintReceipt[0].txHash,
+      priceCredits: finalPriceCredits,
+      mintedAt: mintReceipt[0].createdAt
     });
 
   } catch (error: any) {
