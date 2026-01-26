@@ -34,7 +34,7 @@ import { Category, SubscriptionTier, type Report, type Mission, type FeedAnalysi
 import { MOCK_REPORTS, INITIAL_HERO_PROFILE, RANKS, IAP_PACKS, STORE_ITEMS, STARTER_MISSION } from './constants';
 import { generateNftImage, generateHeroPersonaImage, generateHeroPersonaDetails, generateNftDetails, generateHeroBackstory, generateMissionFromIntel, isAiEnabled } from './services/geminiService';
 import { useTranslations } from './i18n';
-
+import { mintNft, purchaseStoreItem, purchaseIapPack, ApiError } from './services/api';
 export type View = 'mainMenu' | 'categorySelection' | 'hub' | 'heroHub' | 'educationRoleSelection' | 'reportSubmission' | 'missionComplete' | 'reputationAndCurrency' | 'store' | 'reportComplete' | 'liveIntelligence' | 'missionDetail' | 'appLiveIntelligence' | 'generateMission' | 'trainingHolodeck' | 'tacticalVault' | 'transparencyDatabase' | 'aiRegulationHub' | 'incidentRoom' | 'threatMap' | 'teamOps' | 'medicalOutpost' | 'academy' | 'aiWorkDirectives' | 'outreachEscalation' | 'ecosystem' | 'sustainmentCenter' | 'subscription' | 'aiSetup';
 export type TextScale = 'standard' | 'large' | 'ultra' | 'magnified';
 
@@ -228,47 +228,67 @@ const App: React.FC = () => {
   };
 
   // --- STORE PURCHASE LOGIC BEGIN ---
-  // As per instructions: There is NO backend API for store purchases, so purchases are local only
-  // We update inventory/unlockedItemSkus on hero locally
-  const handleInitiateHCPurchase = (iapPack: IapPack) => {
-    // Not implemented, maybe open a modal or a disabled view
-    alert('Store purchases are not implemented.');
-  };
 
-  const handleInitiateStoreItemPurchase = (item: StoreItem) => {
-    // If no backend, implement a fake "unlock" locally, subtract credits if sufficient
-    // Add to hero.inventory or hero.unlockedItemSkus
-    setHero(prev => {
-      const alreadyUnlocked = prev.unlockedItemSkus?.includes(item.sku);
-      if (alreadyUnlocked) {
-        alert('Item is already unlocked.');
-        return prev;
-      }
-      if ((prev.heroCredits || 0) < (item.price || 0)) {
-        alert('Not enough Hero Credits.');
-        return prev;
-      }
-      const newInventory: InventoryItem[] = prev.inventory ? [...(prev.inventory as InventoryItem[])] : [];
-      newInventory.push({
-        sku: item.sku,
-        name: item.name,
-        description: item.description,
-        icon: item.icon || '',
-        quantity: 1,
+  const handleInitiateHCPurchase = async (iapPack: IapPack) => {
+    try {
+      const heroId = hero.operativeId || 'default';
+      const result = await purchaseIapPack({
+        heroId,
+        pack: {
+          sku: iapPack.sku,
+          price: iapPack.price,
+          hcAmount: iapPack.hcAmount,
+        },
       });
-      const newUnlocked = prev.unlockedItemSkus ? [...prev.unlockedItemSkus, item.sku] : [item.sku];
-      alert(`Item "${item.name}" unlocked (local only, no backend).`);
-      return {
-        ...prev,
-        heroCredits: (prev.heroCredits || 0) - (item.price || 0),
-        inventory: newInventory,
-        unlockedItemSkus: newUnlocked,
-      } as HeroWithInventory;
-    });
+
+      if (result.ok && result.wallet) {
+        setHero(prev => ({
+          ...prev,
+          heroCredits: result.wallet.balance || prev.heroCredits,
+        }));
+        alert(`Successfully purchased ${iapPack.sku}! Credits added: ${iapPack.hcAmount}`);
+      }
+    } catch (error: any) {
+      console.error('IAP purchase error:', error);
+      const message = error instanceof ApiError 
+        ? error.message 
+        : `Purchase failed: ${error.message || 'Unknown error. Please check your connection.'}`;
+      alert(message);
+    }
   };
-  // --- STORE PURCHASE LOGIC END ---
 
 
+  const handleInitiateStoreItemPurchase = async (item: StoreItem) => {
+    try {
+      const heroId = hero.operativeId || 'default';
+      const result = await purchaseStoreItem({
+        heroId,
+        item: {
+          sku: item.sku,
+          name: item.name,
+          description: item.description,
+          icon: item.icon,
+          price: item.price,
+        },
+      });
+
+      if (result.ok && result.hero && result.wallet) {
+        setHero(prev => ({
+          ...prev,
+          heroCredits: result.wallet.balance || prev.heroCredits,
+          inventory: result.hero.inventory || prev.inventory || [],
+          unlockedItemSkus: result.hero.unlockedItemSkus || prev.unlockedItemSkus || [],
+        }));
+        alert(`Successfully purchased ${item.name}!`);
+      }
+    } catch (error: any) {
+      console.error('Store purchase error:', error);
+      const message = error instanceof ApiError 
+        ? error.message 
+        : `Purchase failed: ${error.message || 'Unknown error. Please check your connection.'}`;
+      alert(message);
+    }
+  };
   return (
     <div className="min-h-screen flex flex-col transition-all duration-300 bg-zinc-950 text-zinc-100 font-sans selection:bg-cyan-500/30 overflow-x-hidden">
       <Header 
@@ -372,7 +392,8 @@ const App: React.FC = () => {
         )}
 
         {currentView === 'heroHub' && (
-          <HeroHub onReturnToHub={() => setCurrentView('mainMenu')} 
+          <HeroHub 
+            onReturnToHub={() => setCurrentView('mainMenu')}
             missions={missions} 
             isLoadingMissions={false} 
             hero={heroWithRank} 
@@ -380,7 +401,51 @@ const App: React.FC = () => {
             heroLocation={heroLocation} 
             setHeroLocation={setHeroLocation} 
             onGenerateNewMissions={() => {}} 
-            onMintNft={async () => ({} as any)} 
+            onMintNft={async (prompt: string, theme: NftTheme, category: Category, extra?: any) => {
+              try {
+                const heroId = hero.operativeId || 'default';
+                const result = await mintNft({
+                  userId: heroId,
+                  prompt,
+                  theme,
+                  category,
+                  priceCredits: extra?.totalCost || 500,
+                  traits: extra?.traits || [],
+                });
+
+                // Create a Report from the mint result
+                const mintedReport: Report = {
+                  id: `nft-${result.tokenId}`,
+                  title: `MINTED: ${prompt}`,
+                  description: `NFT artifact minted successfully. Token ID: ${result.tokenId}`,
+                  category,
+                  location: 'DPAL Network',
+                  timestamp: new Date(result.mintedAt || Date.now()),
+                  hash: result.txHash || `0x${Math.random().toString(16).slice(2)}`,
+                  blockchainRef: result.txHash || '',
+                  status: 'Submitted',
+                  trustScore: 100,
+                  severity: 'Informational',
+                  isActionable: false,
+                  imageUrls: result.imageUrl ? [result.imageUrl] : []
+                };
+
+                // Update hero credits
+                setHero(prev => ({
+                  ...prev,
+                  heroCredits: (prev.heroCredits || 0) - (result.priceCredits || 500)
+                }));
+
+                return mintedReport;
+
+              } catch (error: any) {
+                console.error('Mint error:', error);
+                const message = error instanceof ApiError
+                  ? error.message
+                  : `Neural link failed: ${error.message || 'Transient neural disruption. Link stability low. Check system node status and API configuration.'}`;
+                throw new Error(message);
+              }
+            }}
             reports={reports} 
             iapPacks={IAP_PACKS} 
             storeItems={STORE_ITEMS} 
