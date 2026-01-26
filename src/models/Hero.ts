@@ -2,6 +2,17 @@ import mongoose from "mongoose";
 
 const { Schema } = mongoose;
 
+const InventoryItemSchema = new Schema(
+  {
+    sku: { type: String, required: true },
+    name: { type: String, required: true },
+    description: { type: String, default: "" },
+    icon: { type: String, default: "" },
+    quantity: { type: Number, default: 1 }
+  },
+  { _id: false }
+);
+
 const HeroSchema = new Schema(
   {
     heroId: {
@@ -31,7 +42,11 @@ const HeroSchema = new Schema(
     reputation: { type: Number, default: 0 },
 
     // Equipment / Vault Summary
-    equippedNftIds: { type: [String], default: [] }
+    equippedNftIds: { type: [String], default: [] },
+
+    // Inventory / Store Items
+    inventory: { type: [InventoryItemSchema], default: [] },
+    unlockedItemSkus: { type: [String], default: [] }
   },
   { timestamps: true }
 );

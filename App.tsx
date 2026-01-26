@@ -244,11 +244,11 @@ const App: React.FC = () => {
         alert('Item is already unlocked.');
         return prev;
       }
-      if ((prev.heroCredits || 0) < (item.priceHC || 0)) {
+      if ((prev.heroCredits || 0) < (item.price || 0)) {
         alert('Not enough Hero Credits.');
         return prev;
       }
-      const newInventory = prev.inventory ? [...prev.inventory] : [];
+      const newInventory: InventoryItem[] = prev.inventory ? [...(prev.inventory as InventoryItem[])] : [];
       newInventory.push({
         sku: item.sku,
         name: item.name,
@@ -260,10 +260,10 @@ const App: React.FC = () => {
       alert(`Item "${item.name}" unlocked (local only, no backend).`);
       return {
         ...prev,
-        heroCredits: (prev.heroCredits || 0) - (item.priceHC || 0),
+        heroCredits: (prev.heroCredits || 0) - (item.price || 0),
         inventory: newInventory,
         unlockedItemSkus: newUnlocked,
-      };
+      } as HeroWithInventory;
     });
   };
   // --- STORE PURCHASE LOGIC END ---
@@ -376,7 +376,7 @@ const App: React.FC = () => {
             missions={missions} 
             isLoadingMissions={false} 
             hero={heroWithRank} 
-            setHero={setHero} 
+            setHero={setHero as React.Dispatch<React.SetStateAction<Hero>>} 
             heroLocation={heroLocation} 
             setHeroLocation={setHeroLocation} 
             onGenerateNewMissions={() => {}} 
