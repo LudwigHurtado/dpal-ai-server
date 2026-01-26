@@ -32,7 +32,7 @@ import SubscriptionView from './components/SubscriptionView';
 import AiSetupView from './components/AiSetupView';
 import { Category, SubscriptionTier, type Report, type Mission, type FeedAnalysis, type Hero, type Rank, SkillLevel, type EducationRole, NftRarity, IapPack, StoreItem, NftTheme, type ChatMessage, IntelItem, type HeroPersona, type TacticalDossier, type TeamMessage, type HealthRecord, Archetype, type SkillType, type AiDirective, SimulationMode, type MissionCompletionSummary, MissionApproach, MissionGoal } from './types';
 import { MOCK_REPORTS, INITIAL_HERO_PROFILE, RANKS, IAP_PACKS, STORE_ITEMS, STARTER_MISSION } from './constants';
-import { generateNftImage, generateHeroPersonaImage, generateHeroPersonaDetails, generateNftDetails, generateHeroBackstory, generateMissionFromIntel, isAiEnabled } from './services/geminiService';
+import { generateHeroPersonaImage, generateHeroPersonaDetails, generateNftDetails, generateHeroBackstory, generateMissionFromIntel, isAiEnabled } from './services/geminiService';
 import { useTranslations } from './i18n';
 import { mintNft, purchaseStoreItem, purchaseIapPack, ApiError } from './services/api';
 export type View = 'mainMenu' | 'categorySelection' | 'hub' | 'heroHub' | 'educationRoleSelection' | 'reportSubmission' | 'missionComplete' | 'reputationAndCurrency' | 'store' | 'reportComplete' | 'liveIntelligence' | 'missionDetail' | 'appLiveIntelligence' | 'generateMission' | 'trainingHolodeck' | 'tacticalVault' | 'transparencyDatabase' | 'aiRegulationHub' | 'incidentRoom' | 'threatMap' | 'teamOps' | 'medicalOutpost' | 'academy' | 'aiWorkDirectives' | 'outreachEscalation' | 'ecosystem' | 'sustainmentCenter' | 'subscription' | 'aiSetup';
@@ -130,6 +130,10 @@ const App: React.FC = () => {
   const [selectedReportForIncidentRoom, setSelectedReportForIncidentRoom] = useState<Report | null>(null);
   const [globalTextScale, setGlobalTextScale] = useState<TextScale>('standard');
   const [isOfflineMode, setIsOfflineMode] = useState(() => localStorage.getItem('dpal-offline-mode') === 'true');
+
+  // Loading states to prevent multiple simultaneous calls
+  const [isPurchasing, setIsPurchasing] = useState(false);
+  const [isMinting, setIsMinting] = useState(false);
 
   useEffect(() => { localStorage.setItem('dpal-offline-mode', String(isOfflineMode)); }, [isOfflineMode]);
 
@@ -230,6 +234,9 @@ const App: React.FC = () => {
   // --- STORE PURCHASE LOGIC BEGIN ---
 
   const handleInitiateHCPurchase = async (iapPack: IapPack) => {
+    // Prevent multiple simultaneous IAP purchases or mint actions
+    if (isPurchasing || isMinting) return;
+    setIsPurchasing(true);
     try {
       const heroId = hero.operativeId || 'default';
       const result = await purchaseIapPack({
@@ -254,11 +261,15 @@ const App: React.FC = () => {
         ? error.message 
         : `Purchase failed: ${error.message || 'Unknown error. Please check your connection.'}`;
       alert(message);
+    } finally {
+      setIsPurchasing(false);
     }
   };
 
-
   const handleInitiateStoreItemPurchase = async (item: StoreItem) => {
+    // Block store purchases if any purchase or mint is in progress
+    if (isPurchasing || isMinting) return;
+    setIsPurchasing(true);
     try {
       const heroId = hero.operativeId || 'default';
       const result = await purchaseStoreItem({
@@ -287,8 +298,11 @@ const App: React.FC = () => {
         ? error.message 
         : `Purchase failed: ${error.message || 'Unknown error. Please check your connection.'}`;
       alert(message);
+    } finally {
+      setIsPurchasing(false);
     }
   };
+
   return (
     <div className="min-h-screen flex flex-col transition-all duration-300 bg-zinc-950 text-zinc-100 font-sans selection:bg-cyan-500/30 overflow-x-hidden">
       <Header 
@@ -352,35 +366,45 @@ const App: React.FC = () => {
         )}
 
         {currentView === 'generateMission' && selectedIntelForMission && (
-          <GenerateMissionView intelItem={selectedIntelForMission} onReturn={() => handleNavigate('liveIntelligence')} onAcceptMission={async (intel, approach, goal) => {
-              const m = await generateMissionFromIntel(intel, approach, goal);
-              const structuredM: Mission = {
+          <GenerateMissionView
+            intelItem={selectedIntelForMission}
+            onReturn={() => handleNavigate('liveIntelligence')}
+            onAcceptMission={async (intel, approach, goal) => {
+              try {
+
+                const m = await generateMissionFromIntel(intel, approach, goal);
+
+                const structuredM: Mission = {
                   ...m,
                   id: `msn-${Date.now()}`,
                   phase: 'RECON',
                   currentActionIndex: 0,
                   status: 'active',
                   reconActions: [
-                      /** FIX: Removed invalid properties 'requiredChecks', 'riskChecks', 'evidenceRequired' and added required 'prompts' */
-                      { id: 'rec-1', name: 'Coordinate Survey', task: 'Verify geospatial center of target.', whyItMatters: "Ensures legal jurisdiction and node alignment.", icon: '🛰️', priority: 'High', isComplete: false, prompts: [{ id: 'p-rec-1', type: 'confirmation', promptText: 'GPS Link Verified', required: true, responseType: 'checkbox', storedAs: { entity: 'riskAssessment', field: 'gps_verified' } }], impactedSkills: ['Technical'] },
-                      { id: 'rec-2', name: 'Strategic Mapping', task: 'Identify impacted citizens.', whyItMatters: "Quantifies community harm factor.", icon: '👥', priority: 'Medium', isComplete: false, prompts: [{ id: 'p-rec-2', type: 'observation', promptText: 'Sector count verified', required: true, responseType: 'text', storedAs: { entity: 'missionLog', field: 'impact_count' } }], impactedSkills: ['Empathy'] },
+                    { id: 'rec-1', name: 'Coordinate Survey', task: 'Verify geospatial center of target.', whyItMatters: "Ensures legal jurisdiction and node alignment.", icon: '🛰️', priority: 'High', isComplete: false, prompts: [{ id: 'p-rec-1', type: 'confirmation', promptText: 'GPS Link Verified', required: true, responseType: 'checkbox', storedAs: { entity: 'riskAssessment', field: 'gps_verified' } }], impactedSkills: ['Technical'] },
+                    { id: 'rec-2', name: 'Strategic Mapping', task: 'Identify impacted citizens.', whyItMatters: "Quantifies community harm factor.", icon: '👥', priority: 'Medium', isComplete: false, prompts: [{ id: 'p-rec-2', type: 'observation', promptText: 'Sector count verified', required: true, responseType: 'text', storedAs: { entity: 'missionLog', field: 'impact_count' } }], impactedSkills: ['Empathy'] },
                   ],
                   mainActions: (m.steps || []).map((s: any, i: number) => ({
-                      id: `act-${i}`,
-                      name: s.name,
-                      task: s.task,
-                      whyItMatters: s.whyItMatters || "Primary field directive.",
-                      icon: s.icon,
-                      priority: s.priority || 'Medium',
-                      isComplete: false,
-                      /** FIX: Removed invalid properties 'requiredChecks', 'riskChecks', 'evidenceRequired' and added required 'prompts' */
-                      prompts: s.prompts || [],
-                      impactedSkills: ['Forensic', 'Tactical']
+                    id: `act-${i}`,
+                    name: s.name,
+                    task: s.task,
+                    whyItMatters: s.whyItMatters || "Primary field directive.",
+                    icon: s.icon,
+                    priority: s.priority || 'Medium',
+                    isComplete: false,
+                    prompts: s.prompts || [],
+                    impactedSkills: ['Forensic', 'Tactical']
                   }))
-              };
-              setMissions(prev => [structuredM, ...prev]);
-              handleNavigate('heroHub', undefined, 'missions');
-          }} />
+                };
+
+                setMissions(prev => [structuredM, ...prev]);
+                handleNavigate('heroHub', undefined, 'missions');
+              } catch (error: any) {
+                console.error('Mission generation error:', error);
+                alert(`Failed to generate mission: ${error.message || 'Unknown error'}`);
+              }
+            }}
+          />
         )}
 
         {currentView === 'missionDetail' && selectedMissionForDetail && (
@@ -402,6 +426,8 @@ const App: React.FC = () => {
             setHeroLocation={setHeroLocation} 
             onGenerateNewMissions={() => {}} 
             onMintNft={async (prompt: string, theme: NftTheme, category: Category, extra?: any) => {
+              if (isMinting) throw new Error("Mint already in progress. Please wait.");
+              setIsMinting(true);
               try {
                 const heroId = hero.operativeId || 'default';
                 const result = await mintNft({
@@ -444,6 +470,8 @@ const App: React.FC = () => {
                   ? error.message
                   : `Neural link failed: ${error.message || 'Transient neural disruption. Link stability low. Check system node status and API configuration.'}`;
                 throw new Error(message);
+              } finally {
+                setIsMinting(false);
               }
             }}
             reports={reports} 
@@ -482,6 +510,16 @@ const App: React.FC = () => {
           <EcosystemOverview onReturn={() => setCurrentView('mainMenu')} />
         )}
       </main>
+      {(isMinting || isPurchasing) && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 pointer-events-auto">
+          <div className="bg-zinc-800 px-8 py-6 rounded-xl text-lg text-cyan-200 font-semibold shadow-lg flex flex-row items-center gap-4">
+            <svg className="animate-spin h-6 w-6 text-cyan-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" /></svg>
+            <span>
+              {isMinting ? "Minting in progress. Please wait..." : "Processing purchase..."}
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
