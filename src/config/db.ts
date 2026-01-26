@@ -9,6 +9,11 @@ export async function connectDb() {
 
   mongoose.set("strictQuery", true);
 
-  await mongoose.connect(env.MONGODB_URI);
-  console.log("✅ Mongo connected");
+  try {
+    await mongoose.connect(env.MONGODB_URI);
+    console.log("✅ Mongo connected");
+  } catch (error: any) {
+    console.error("⚠️ Mongo connection failed (server will continue without DB):", error.message);
+    // Don't throw - let server start without DB for now
+  }
 }
