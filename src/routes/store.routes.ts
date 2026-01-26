@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { purchaseStoreItem, purchaseIapPack } from "../services/store.service.js";
+import { purchaseStoreItem, purchaseIapPack } from "../services/store.services.js";
 
 const router = Router();
 
