@@ -1,6 +1,6 @@
 
 /** FIX: Added NftTheme to imports */
-import { Category, Report, Hero, NftRarity, Rank, Item, Archetype, SkillType, TrainingModule, EducationRole, Mission, HeroPath, NftTheme, SubscriptionTier } from "./types";
+import { Category, CharacterNft, Report, Hero, NftRarity, Rank, Item, Archetype, SkillType, TrainingModule, EducationRole, Mission, HeroPath, NftTheme, SubscriptionTier } from "./types";
 
 export const CATEGORIES = Object.values(Category);
 
@@ -846,5 +846,5 @@ export const NFT_THEMES = [
     { value: NftTheme.Magma, label: 'Volcanic' },
 ];
 
-export const LEGENDS_OF_THE_LEDGER_NFTS = [];
+export const LEGENDS_OF_THE_LEDGER_NFTS: CharacterNft[] = [];
 export const BADGES = [];

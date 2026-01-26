@@ -38,6 +38,21 @@ import { useTranslations } from './i18n';
 export type View = 'mainMenu' | 'categorySelection' | 'hub' | 'heroHub' | 'educationRoleSelection' | 'reportSubmission' | 'missionComplete' | 'reputationAndCurrency' | 'store' | 'reportComplete' | 'liveIntelligence' | 'missionDetail' | 'appLiveIntelligence' | 'generateMission' | 'trainingHolodeck' | 'tacticalVault' | 'transparencyDatabase' | 'aiRegulationHub' | 'incidentRoom' | 'threatMap' | 'teamOps' | 'medicalOutpost' | 'academy' | 'aiWorkDirectives' | 'outreachEscalation' | 'ecosystem' | 'sustainmentCenter' | 'subscription' | 'aiSetup';
 export type TextScale = 'standard' | 'large' | 'ultra' | 'magnified';
 
+// --- UPDATED HERO INVENTORY SUPPORT BEGIN (local, no backend) ---
+type InventoryItem = {
+  sku: string;
+  name: string;
+  description?: string;
+  icon?: string;
+  quantity?: number;
+};
+type HeroWithInventory = Hero & {
+  inventory?: InventoryItem[];
+  unlockedItemSkus?: string[];
+};
+// --- END UPDATED HERO INVENTORY TYPES ---
+
+
 const getInitialReports = (): Report[] => {
   const saved = localStorage.getItem('dpal-reports');
   if (saved) {
@@ -77,10 +92,20 @@ const getInitialMissions = (): Mission[] => {
   return [];
 };
 
-const getInitialHero = (): Hero => {
+const getInitialHero = (): HeroWithInventory => {
   const saved = localStorage.getItem('dpal-hero');
-  if (saved) { try { return JSON.parse(saved); } catch (e) { return INITIAL_HERO_PROFILE; } }
-  return INITIAL_HERO_PROFILE;
+  if (saved) { 
+    try { 
+      const parsed = JSON.parse(saved);
+      // Add inventory/unlockedItemSkus if missing for migration
+      if (!parsed.inventory) parsed.inventory = [];
+      if (!parsed.unlockedItemSkus) parsed.unlockedItemSkus = [];
+      return parsed; 
+    } catch (e) { 
+      return { ...INITIAL_HERO_PROFILE, inventory: [], unlockedItemSkus: [] }; 
+    } 
+  }
+  return { ...INITIAL_HERO_PROFILE, inventory: [], unlockedItemSkus: [] };
 };
 
 const App: React.FC = () => {
@@ -94,9 +119,9 @@ const App: React.FC = () => {
   const [selectedCategoryForSubmission, setSelectedCategoryForSubmission] = useState<Category | null>(null);
   const [selectedIntelForMission, setSelectedIntelForMission] = useState<IntelItem | null>(null);
   const [initialCategoriesForIntel, setInitialCategoriesForIntel] = useState<Category[]>([]);
-  
+
   const [missions, setMissions] = useState<Mission[]>(getInitialMissions);
-  const [hero, setHero] = useState<Hero>(getInitialHero);
+  const [hero, setHero] = useState<HeroWithInventory>(getInitialHero);
   const [heroLocation, setHeroLocation] = useState<string>('');
   const [completedReport, setCompletedReport] = useState<Report | null>(null);
   const [completedMissionSummary, setCompletedMissionSummary] = useState<MissionCompletionSummary | null>(null);
@@ -119,7 +144,7 @@ const App: React.FC = () => {
     localStorage.setItem('dpal-missions', JSON.stringify(missions));
   }, [hero, reports, missions]);
 
-  const heroWithRank = useMemo((): Hero => {
+  const heroWithRank = useMemo((): HeroWithInventory => {
     let currentRank: Rank = RANKS[0];
     for (const rank of RANKS) { if (hero.xp >= rank.xpNeeded) currentRank = rank; else break; }
     return { ...hero, rank: currentRank.level, title: hero.equippedTitle || currentRank.title };
@@ -201,6 +226,48 @@ const App: React.FC = () => {
     setCompletedReport(finalReport);
     setCurrentView('reportComplete');
   };
+
+  // --- STORE PURCHASE LOGIC BEGIN ---
+  // As per instructions: There is NO backend API for store purchases, so purchases are local only
+  // We update inventory/unlockedItemSkus on hero locally
+  const handleInitiateHCPurchase = (iapPack: IapPack) => {
+    // Not implemented, maybe open a modal or a disabled view
+    alert('Store purchases are not implemented.');
+  };
+
+  const handleInitiateStoreItemPurchase = (item: StoreItem) => {
+    // If no backend, implement a fake "unlock" locally, subtract credits if sufficient
+    // Add to hero.inventory or hero.unlockedItemSkus
+    setHero(prev => {
+      const alreadyUnlocked = prev.unlockedItemSkus?.includes(item.sku);
+      if (alreadyUnlocked) {
+        alert('Item is already unlocked.');
+        return prev;
+      }
+      if ((prev.heroCredits || 0) < (item.priceHC || 0)) {
+        alert('Not enough Hero Credits.');
+        return prev;
+      }
+      const newInventory = prev.inventory ? [...prev.inventory] : [];
+      newInventory.push({
+        sku: item.sku,
+        name: item.name,
+        description: item.description,
+        icon: item.icon || '',
+        quantity: 1,
+      });
+      const newUnlocked = prev.unlockedItemSkus ? [...prev.unlockedItemSkus, item.sku] : [item.sku];
+      alert(`Item "${item.name}" unlocked (local only, no backend).`);
+      return {
+        ...prev,
+        heroCredits: (prev.heroCredits || 0) - (item.priceHC || 0),
+        inventory: newInventory,
+        unlockedItemSkus: newUnlocked,
+      };
+    });
+  };
+  // --- STORE PURCHASE LOGIC END ---
+
 
   return (
     <div className="min-h-screen flex flex-col transition-all duration-300 bg-zinc-950 text-zinc-100 font-sans selection:bg-cyan-500/30 overflow-x-hidden">
@@ -305,7 +372,29 @@ const App: React.FC = () => {
         )}
 
         {currentView === 'heroHub' && (
-          <HeroHub onReturnToHub={() => setCurrentView('mainMenu')} missions={missions} isLoadingMissions={false} hero={heroWithRank} setHero={setHero} heroLocation={heroLocation} setHeroLocation={setHeroLocation} onGenerateNewMissions={() => {}} onMintNft={async () => ({} as any)} reports={reports} iapPacks={IAP_PACKS} storeItems={STORE_ITEMS} onInitiateHCPurchase={() => {}} onInitiateStoreItemPurchase={() => {}} onAddHeroPersona={handleAddHeroPersona} onDeleteHeroPersona={() => {}} onEquipHeroPersona={(pid) => setHero(prev => ({ ...prev, equippedPersonaId: pid }))} onGenerateHeroBackstory={async () => {}} onNavigateToMissionDetail={(m) => { setSelectedMissionForDetail(m); setCurrentView('missionDetail'); }} onNavigate={handleNavigate} activeTab={heroHubTab} setActiveTab={setHeroHubTab} />
+          <HeroHub onReturnToHub={() => setCurrentView('mainMenu')} 
+            missions={missions} 
+            isLoadingMissions={false} 
+            hero={heroWithRank} 
+            setHero={setHero} 
+            heroLocation={heroLocation} 
+            setHeroLocation={setHeroLocation} 
+            onGenerateNewMissions={() => {}} 
+            onMintNft={async () => ({} as any)} 
+            reports={reports} 
+            iapPacks={IAP_PACKS} 
+            storeItems={STORE_ITEMS} 
+            onInitiateHCPurchase={handleInitiateHCPurchase}
+            onInitiateStoreItemPurchase={handleInitiateStoreItemPurchase}
+            onAddHeroPersona={handleAddHeroPersona} 
+            onDeleteHeroPersona={() => {}} 
+            onEquipHeroPersona={(pid) => setHero(prev => ({ ...prev, equippedPersonaId: pid }))}
+            onGenerateHeroBackstory={async () => {}} 
+            onNavigateToMissionDetail={(m) => { setSelectedMissionForDetail(m); setCurrentView('missionDetail'); }} 
+            onNavigate={handleNavigate} 
+            activeTab={heroHubTab} 
+            setActiveTab={setHeroHubTab} 
+          />
         )}
 
         {currentView === 'transparencyDatabase' && (
