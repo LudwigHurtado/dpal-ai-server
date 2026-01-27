@@ -130,36 +130,38 @@ const NftCard: React.FC<NftCardProps> = ({ report, characterNft }) => {
     const categoryName = categoryInfo ? t(categoryInfo.translationKey) : (nft?.mintCategory || report?.category);
 
     const [imageError, setImageError] = useState(false);
-    const [finalImageUrl, setFinalImageUrl] = useState<string>('');
-
-    // CRITICAL: Force correct URL on every render
-    useEffect(() => {
-        if (displayData?.imageUrl && !isCharacter) {
-            const original = String(displayData.imageUrl).trim();
-            
-            // Extract tokenId - this is the most reliable way
-            const tokenIdMatch = original.match(/DPAL-[^\/\.\?]+/);
-            
-            if (tokenIdMatch) {
-                const tokenId = tokenIdMatch[0];
-                const correct = `${apiBase}/api/assets/${tokenId}.png`;
-                
-                if (correct !== finalImageUrl) {
-                    console.log('🔧 NftCard: Forcing correct URL', {
-                        original,
-                        tokenId,
-                        correct,
-                        was: finalImageUrl
-                    });
-                    setFinalImageUrl(correct);
-                }
-            } else if (resolvedImageUrl && resolvedImageUrl !== finalImageUrl) {
-                setFinalImageUrl(resolvedImageUrl);
-            }
-        } else if (resolvedImageUrl && resolvedImageUrl !== finalImageUrl) {
-            setFinalImageUrl(resolvedImageUrl);
+    
+    // CRITICAL: Initialize finalImageUrl immediately (not in useEffect) to prevent wrong URL from rendering
+    const getFinalImageUrl = (): string => {
+        if (!displayData?.imageUrl || isCharacter) {
+            return resolvedImageUrl;
         }
-    }, [displayData?.imageUrl, resolvedImageUrl, apiBase, isCharacter, finalImageUrl]);
+        
+        const original = String(displayData.imageUrl).trim();
+        
+        // Extract tokenId - this is the most reliable way
+        const tokenIdMatch = original.match(/DPAL-[^\/\.\?]+/);
+        
+        if (tokenIdMatch) {
+            const tokenId = tokenIdMatch[0];
+            const correct = `${apiBase}/api/assets/${tokenId}.png`;
+            
+            // Log if we're fixing a bad URL
+            if (original.includes('api.dpal.net') || original.includes('/v1/assets/')) {
+                console.log('🔧 NftCard: FIXING bad URL', {
+                    original,
+                    tokenId,
+                    correct
+                });
+            }
+            
+            return correct;
+        }
+        
+        return resolvedImageUrl;
+    };
+    
+    const finalImageUrl = getFinalImageUrl();
 
     return (
         <div ref={cardRef} className="nft-card-container group relative w-full max-w-sm mx-auto rounded-2xl overflow-hidden bg-gray-800 shadow-2xl transition-transform duration-300 hover:scale-105 p-2 bg-gradient-to-br from-amber-300 via-amber-500 to-amber-700">

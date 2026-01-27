@@ -138,7 +138,26 @@ const MyReportCard: React.FC<MyReportCardProps> = ({ report, onJoinChat }) => {
                         <h5 className="text-[10px] font-black text-zinc-600 uppercase tracking-[0.4em] mb-4">Verification_Artifact</h5>
                         <div className="flex items-center space-x-8 bg-zinc-900/40 p-6 rounded-3xl border border-zinc-800 group-hover:border-cyan-500/20 transition-all">
                             <div className="w-16 h-24 bg-black rounded-xl overflow-hidden flex-shrink-0 shadow-2xl border border-zinc-800">
-                                <img src={report.earnedNft.imageUrl} alt={report.earnedNft.title} className="w-full h-full object-cover opacity-80"/>
+                                {(() => {
+                                    // Fix: Normalize imageUrl to use Railway backend
+                                    let imgUrl = report.earnedNft.imageUrl;
+                                    const apiBase = (import.meta as any).env?.VITE_API_BASE || 'https://web-production-a27b.up.railway.app';
+                                    
+                                    // Extract tokenId and rebuild URL
+                                    const tokenIdMatch = imgUrl.match(/DPAL-[^\/\.\?]+/);
+                                    if (tokenIdMatch) {
+                                        imgUrl = `${apiBase}/api/assets/${tokenIdMatch[0]}.png`;
+                                    } else if (imgUrl.includes('api.dpal.net') || imgUrl.includes('/v1/assets/')) {
+                                        // Fallback: fix path
+                                        imgUrl = imgUrl.replace(/https?:\/\/[^\/]+/, '').replace('/v1/assets/', '/api/assets/');
+                                        imgUrl = imgUrl.startsWith('/') ? `${apiBase}${imgUrl}` : `${apiBase}/${imgUrl}`;
+                                    } else if (!imgUrl.startsWith('http')) {
+                                        // Relative path - prepend apiBase
+                                        imgUrl = `${apiBase}${imgUrl.startsWith('/') ? imgUrl : `/${imgUrl}`}`;
+                                    }
+                                    
+                                    return <img src={imgUrl} alt={report.earnedNft.title} className="w-full h-full object-cover opacity-80"/>;
+                                })()}
                             </div>
                             <div className="flex-grow min-w-0">
                                 <div className="flex items-center justify-between gap-4 mb-3">
