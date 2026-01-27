@@ -15,7 +15,10 @@ const NftCard: React.FC<NftCardProps> = ({ report, characterNft }) => {
     const cardRef = useRef<HTMLDivElement>(null);
     const [showQr, setShowQr] = useState(false);
     const { t } = useTranslations();
-    const apiBase = (import.meta as any).env?.VITE_API_BASE || 'https://web-production-a27b.up.railway.app';
+    // Get API base URL - Vite exposes env vars at build time
+    const envApiBase = (import.meta as any).env?.VITE_API_BASE;
+    const apiBase = envApiBase || 'https://web-production-a27b.up.railway.app';
+    
     const nft = report?.earnedNft;
     const isCharacter = !!characterNft;
     const displayData = isCharacter ? characterNft : nft;
@@ -28,17 +31,18 @@ const NftCard: React.FC<NftCardProps> = ({ report, characterNft }) => {
             : `${apiBase}${displayData.imageUrl}`)
         : '';
 
-    // Debug: Log the image URL resolution
+    // Debug: Log URL resolution to help diagnose issues
     useEffect(() => {
-        if (displayData?.imageUrl) {
-            console.log('🖼️ NftCard: Image URL resolution:', {
-                original: displayData.imageUrl,
+        if (displayData?.imageUrl && !isCharacter) {
+            console.log('🖼️ NftCard Image URL Debug:', {
+                originalUrl: displayData.imageUrl,
+                envVar: envApiBase || '(NOT SET - using fallback)',
                 apiBase: apiBase,
-                resolved: resolvedImageUrl,
-                envVar: (import.meta as any).env?.VITE_API_BASE || '(not set, using default)'
+                resolvedUrl: resolvedImageUrl,
+                warning: !envApiBase ? '⚠️ VITE_API_BASE not set in Vercel! Using fallback.' : '✅ Using VITE_API_BASE from env'
             });
         }
-    }, [displayData?.imageUrl, apiBase, resolvedImageUrl]);
+    }, [displayData?.imageUrl, apiBase, resolvedImageUrl, envApiBase, isCharacter]);
 
     useEffect(() => {
         const card = cardRef.current;
