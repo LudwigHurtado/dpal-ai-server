@@ -134,7 +134,7 @@ const NftCard: React.FC<NftCardProps> = ({ report, characterNft }) => {
     // CRITICAL: Initialize finalImageUrl immediately (not in useEffect) to prevent wrong URL from rendering
     const getFinalImageUrl = (): string => {
         if (!displayData?.imageUrl || isCharacter) {
-            return resolvedImageUrl;
+            return resolvedImageUrl || '';
         }
         
         const original = String(displayData.imageUrl).trim();
@@ -146,37 +146,81 @@ const NftCard: React.FC<NftCardProps> = ({ report, characterNft }) => {
             const tokenId = tokenIdMatch[0];
             const correct = `${apiBase}/api/assets/${tokenId}.png`;
             
-            // Log if we're fixing a bad URL
+            // ALWAYS log to help debug
+            console.log('🔧 NftCard: Computing image URL', {
+                original,
+                tokenId,
+                correct,
+                apiBase,
+                envVar: envApiBase || '(NOT SET)',
+                isBadUrl: original.includes('api.dpal.net') || original.includes('/v1/assets/')
+            });
+            
+            // CRITICAL: Block any api.dpal.net URLs from being used
             if (original.includes('api.dpal.net') || original.includes('/v1/assets/')) {
-                console.log('🔧 NftCard: FIXING bad URL', {
-                    original,
-                    tokenId,
-                    correct
+                console.error('🚨 BLOCKED bad URL, using corrected:', {
+                    blocked: original,
+                    using: correct
                 });
             }
             
             return correct;
         }
         
-        return resolvedImageUrl;
+        // Fallback: use resolvedImageUrl but log warning
+        if (resolvedImageUrl && (resolvedImageUrl.includes('api.dpal.net') || resolvedImageUrl.includes('/v1/assets/'))) {
+            console.error('🚨 resolvedImageUrl still has bad URL:', resolvedImageUrl);
+            // Try to extract tokenId from resolvedImageUrl
+            const fallbackMatch = resolvedImageUrl.match(/DPAL-[^\/\.\?]+/);
+            if (fallbackMatch) {
+                return `${apiBase}/api/assets/${fallbackMatch[0]}.png`;
+            }
+        }
+        
+        return resolvedImageUrl || '';
     };
     
     const finalImageUrl = getFinalImageUrl();
+    
+    // CRITICAL: Final safety check - block wrong URLs at render time
+    const safeImageUrl = (() => {
+        if (!finalImageUrl) return '';
+        if (finalImageUrl.includes('api.dpal.net') || finalImageUrl.includes('/v1/assets/')) {
+            console.error('🚨 FINAL BLOCK: finalImageUrl still has bad URL, forcing correction');
+            const tokenIdMatch = finalImageUrl.match(/DPAL-[^\/\.\?]+/);
+            if (tokenIdMatch) {
+                return `${apiBase}/api/assets/${tokenIdMatch[0]}.png`;
+            }
+            return '';
+        }
+        return finalImageUrl;
+    })();
 
     return (
         <div ref={cardRef} className="nft-card-container group relative w-full max-w-sm mx-auto rounded-2xl overflow-hidden bg-gray-800 shadow-2xl transition-transform duration-300 hover:scale-105 p-2 bg-gradient-to-br from-amber-300 via-amber-500 to-amber-700">
             <div className="relative w-full h-full rounded-lg overflow-hidden bg-black">
-                {!imageError && finalImageUrl ? (
+                {!imageError && safeImageUrl ? (
                     <img 
-                        src={finalImageUrl} 
+                        key={safeImageUrl} // Force re-render if URL changes
+                        src={safeImageUrl} 
                         alt={displayData.title} 
                         className="w-full h-full object-cover aspect-[4/5]" 
-                        onError={() => {
-                            console.error('❌ NFT image failed to load:', finalImageUrl);
+                        onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            console.error('❌ NFT image failed to load:', {
+                                attemptedUrl: target.src,
+                                expectedUrl: safeImageUrl,
+                                originalUrl: displayData?.imageUrl,
+                                apiBase,
+                                envVar: envApiBase || '(NOT SET)'
+                            });
                             setImageError(true);
                         }}
                         onLoad={() => {
-                            console.log('✅ NFT image loaded successfully:', finalImageUrl);
+                            console.log('✅ NFT image loaded successfully:', {
+                                url: safeImageUrl,
+                                tokenId: safeImageUrl.match(/DPAL-[^\/\.\?]+/)?.[0]
+                            });
                         }}
                     />
                 ) : (
