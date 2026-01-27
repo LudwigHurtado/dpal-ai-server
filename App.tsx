@@ -58,7 +58,38 @@ type HeroWithInventory = Hero & {
 const getInitialReports = (): Report[] => {
   const saved = localStorage.getItem('dpal-reports');
   if (saved) {
-    try { return JSON.parse(saved).map((r: any) => ({ ...r, timestamp: new Date(r.timestamp) })); } 
+    try { 
+      const reports = JSON.parse(saved).map((r: any) => ({ ...r, timestamp: new Date(r.timestamp) }));
+      
+      // FIX: Clean up any api.dpal.net URLs in stored reports
+      const cleanedReports = reports.map((r: Report) => {
+        if (r.earnedNft?.imageUrl && (r.earnedNft.imageUrl.includes('api.dpal.net') || r.earnedNft.imageUrl.includes('/v1/assets/'))) {
+          const tokenIdMatch = r.earnedNft.imageUrl.match(/DPAL-[^\/\.\?]+/);
+          if (tokenIdMatch) {
+            r.earnedNft.imageUrl = `/api/assets/${tokenIdMatch[0]}.png`;
+          }
+        }
+        if (r.imageUrls) {
+          r.imageUrls = r.imageUrls.map(url => {
+            if (url.includes('api.dpal.net') || url.includes('/v1/assets/')) {
+              const tokenIdMatch = url.match(/DPAL-[^\/\.\?]+/);
+              if (tokenIdMatch) {
+                return `/api/assets/${tokenIdMatch[0]}.png`;
+              }
+            }
+            return url;
+          });
+        }
+        return r;
+      });
+      
+      // Save cleaned reports back to localStorage
+      if (JSON.stringify(reports) !== JSON.stringify(cleanedReports)) {
+        localStorage.setItem('dpal-reports', JSON.stringify(cleanedReports));
+      }
+      
+      return cleanedReports;
+    } 
     catch (e) { return MOCK_REPORTS; }
   }
   return MOCK_REPORTS;
