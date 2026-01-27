@@ -25,10 +25,49 @@ const NftCard: React.FC<NftCardProps> = ({ report, characterNft }) => {
 
     // Normalize image URL so relative paths like \"/api/assets/...\" load from
     // the backend API base instead of the Vercel frontend origin.
+    // FIX: Also handle /v1/assets/ paths and api.dpal.net URLs
     const resolvedImageUrl = displayData?.imageUrl
-        ? (displayData.imageUrl.startsWith('http')
-            ? displayData.imageUrl
-            : `${apiBase}${displayData.imageUrl}`)
+        ? (() => {
+            let url = displayData.imageUrl;
+            
+            // Fix: Replace any api.dpal.net URLs with our backend
+            if (url.includes('api.dpal.net')) {
+                url = url.replace(/https?:\/\/[^\/]+/, '');
+            }
+            
+            // Fix: Replace /v1/assets/ with /api/assets/
+            if (url.includes('/v1/assets/')) {
+                url = url.replace('/v1/assets/', '/api/assets/');
+            }
+            
+            // If it's already a full URL, return it (but only if it's our backend)
+            if (url.startsWith('http')) {
+                // If it's pointing to our backend, use it as-is
+                if (url.includes('web-production-a27b.up.railway.app') || url.includes(apiBase)) {
+                    return url;
+                }
+                // Otherwise, extract just the path
+                try {
+                    const urlObj = new URL(url);
+                    url = urlObj.pathname;
+                } catch {
+                    // If URL parsing fails, try to extract path manually
+                    url = url.replace(/https?:\/\/[^\/]+/, '');
+                }
+            }
+            
+            // Ensure it starts with /api/assets/
+            if (!url.startsWith('/api/assets/')) {
+                // Try to extract tokenId and rebuild URL
+                const tokenIdMatch = url.match(/DPAL-[^\/\.]+/);
+                if (tokenIdMatch) {
+                    url = `/api/assets/${tokenIdMatch[0]}.png`;
+                }
+            }
+            
+            // Prepend apiBase to relative paths
+            return url.startsWith('/') ? `${apiBase}${url}` : `${apiBase}/${url}`;
+        })()
         : '';
 
     // Debug: Log URL resolution to help diagnose issues
