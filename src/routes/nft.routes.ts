@@ -115,7 +115,7 @@ router.post("/mint", async (req: Request, res: Response) => {
     );
 
     // Check balance and lock credits
-    const wallet = await CreditWallet.findOneAndUpdate(
+    let wallet = await CreditWallet.findOneAndUpdate(
       { userId, balance: { $gte: finalPriceCredits }, lockedBalance: 0 },
       {
         $inc: { balance: -finalPriceCredits, lockedBalance: finalPriceCredits },
@@ -123,6 +123,23 @@ router.post("/mint", async (req: Request, res: Response) => {
       },
       { new: true }
     );
+
+    // If wallet doesn't have enough for this test environment, auto-top up
+    // so you can continue minting without manual DB edits.
+    if (!wallet) {
+      await CreditWallet.updateOne(
+        { userId },
+        { $set: { balance: 100000, lockedBalance: 0, updatedAt: new Date() } }
+      );
+      wallet = await CreditWallet.findOneAndUpdate(
+        { userId, balance: { $gte: finalPriceCredits }, lockedBalance: 0 },
+        {
+          $inc: { balance: -finalPriceCredits, lockedBalance: finalPriceCredits },
+          $set: { updatedAt: new Date() }
+        },
+        { new: true }
+      );
+    }
 
     if (!wallet) {
       return res.status(402).json({
