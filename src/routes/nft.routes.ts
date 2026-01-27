@@ -7,6 +7,7 @@ import { CreditWallet } from "../models/CreditWallet.js";
 import { CreditLedger } from "../models/CreditLedger.js";
 import { AuditEvent } from "../models/AuditEvent.js";
 import { NftAsset } from "../models/NftAsset.js";
+import { Hero } from "../models/Hero.js";
 import mongoose from "mongoose";
 
 const router = Router();
@@ -44,28 +45,56 @@ router.post("/mint", async (req: Request, res: Response) => {
   }
 
   // For atomicity, wrap operation in a DB transaction/session
-  const session = await mongoose.startSession();
-  session.startTransaction();
+  // Note: Transactions require replica set. If not available, proceed without transaction.
+  let session: mongoose.ClientSession | null = null;
+  let useTransactions = false;
+  
+  try {
+    session = await mongoose.startSession();
+    session.startTransaction();
+    useTransactions = true;
+  } catch (transactionError: any) {
+    // If transactions not supported (standalone MongoDB), proceed without them
+    if (transactionError.message?.includes("replica set") || transactionError.message?.includes("mongos")) {
+      console.warn("⚠️ MongoDB transactions not available (standalone instance). Proceeding without transactions.");
+      session = null;
+      useTransactions = false;
+    } else {
+      throw transactionError; // Re-throw if it's a different error
+    }
+  }
 
   try {
     const { userId, prompt, theme, category, priceCredits, idempotencyKey, nonce, timestamp, traits } = req.body;
 
     // === Input Validation ===
     if (!userId || typeof userId !== "string" || userId.trim() === "") {
-      await session.abortTransaction();
-      session.endSession();
+      if (useTransactions && session) {
+        await session.abortTransaction();
+      }
+      if (session) {
+        session.endSession();
+      }
       return res.status(400).json({ error: "userId is required and must be a non-empty string" });
     }
     if (!prompt || typeof prompt !== "string" || prompt.trim() === "") {
-      await session.abortTransaction();
-      session.endSession();
+      if (useTransactions && session) {
+        await session.abortTransaction();
+      }
+      if (session) {
+        session.endSession();
+      }
       return res.status(400).json({ error: "prompt is required and must be a non-empty string" });
     }
     if (priceCredits !== undefined) {
       const credits = Number(priceCredits);
       if (isNaN(credits) || credits < 0 || !Number.isInteger(credits)) {
-        await session.abortTransaction();
-        session.endSession();
+        if (useTransactions && session) {
+          await session.abortTransaction();
+        }
+        if (session) {
+          session.endSession();
+        }
         return res.status(400).json({ error: "priceCredits must be a non-negative integer" });
       }
     }
@@ -77,8 +106,12 @@ router.post("/mint", async (req: Request, res: Response) => {
     // === Check for in-progress or duplicate mint (idempotency) ===
     const existingReceipt = await MintReceipt.findOne({ userId, idempotencyKey: idemKey }).session(session);
     if (existingReceipt) {
-      await session.abortTransaction();
-      session.endSession();
+      if (useTransactions && session) {
+        await session.abortTransaction();
+      }
+      if (session) {
+        session.endSession();
+      }
       return res.status(409).json({
         error: "mint_in_progress",
         message: "A mint request with this idempotency key was already processed",
@@ -91,7 +124,7 @@ router.post("/mint", async (req: Request, res: Response) => {
     await CreditWallet.updateOne(
       { userId },
       { $setOnInsert: { balance: 10000, lockedBalance: 0 } },
-      { upsert: true, session }
+      { upsert: true, ...(session ? { session } : {}) }
     );
 
     // Check balance and lock credits
@@ -105,8 +138,12 @@ router.post("/mint", async (req: Request, res: Response) => {
     );
 
     if (!wallet) {
-      await session.abortTransaction();
-      session.endSession();
+      if (useTransactions && session) {
+        await session.abortTransaction();
+      }
+      if (session) {
+        session.endSession();
+      }
       return res.status(402).json({
         error: "insufficient_balance",
         message: "Insufficient credits in wallet to complete mint",
@@ -122,7 +159,7 @@ router.post("/mint", async (req: Request, res: Response) => {
       referenceId: idemKey,
       idempotencyKey: `lock-${idemKey}`,
       meta: { prompt, theme, category }
-    }], { session });
+    }], session ? { session: session } : {});
 
     // === Audit Event: mint initiated ===
     await AuditEvent.create([{
@@ -139,7 +176,7 @@ router.post("/mint", async (req: Request, res: Response) => {
         idempotencyKey: idemKey,
         traits
       }
-    }], { session });
+    }], session ? { session: session } : {});
     
     // === (Try) Mint Logic ===
     // Let's call image generation and then record mint
@@ -156,7 +193,7 @@ router.post("/mint", async (req: Request, res: Response) => {
       await CreditWallet.updateOne(
         { userId },
         { $inc: { balance: finalPriceCredits, lockedBalance: -finalPriceCredits } },
-        { session }
+        session ? { session } : {}
       );
       await AuditEvent.create([{
         actorUserId: userId,
@@ -165,9 +202,13 @@ router.post("/mint", async (req: Request, res: Response) => {
         entityId: idemKey,
         hash: `mint-failed-${idemKey}`,
         meta: { prompt, error: String(err) }
-      }], { session });
-      await session.abortTransaction();
-      session.endSession();
+      }], session ? { session: session } : {});
+      if (useTransactions && session) {
+        await session.abortTransaction();
+      }
+      if (session) {
+        session.endSession();
+      }
 
       return res.status(502).json({
         error: "image_generation_failed",
@@ -186,7 +227,7 @@ router.post("/mint", async (req: Request, res: Response) => {
       createdByUserId: userId,
       status: 'MINTED',
       imageData: Buffer.from(base64, 'base64')
-    }], { session });
+    }], session ? { session: session } : {});
 
     // === Create MintRequest for receipt reference ===
     const { MintRequest } = await import("../models/MintRequest.js");
@@ -200,7 +241,7 @@ router.post("/mint", async (req: Request, res: Response) => {
       nonce: nonce || Math.random().toString(36).slice(2, 15),
       timestamp: timestamp || Date.now(),
       status: 'COMPLETED'
-    }], { session });
+    }], session ? { session: session } : {});
 
     // === Complete ledger entry (spend) ===
     const spendLedgerEntry = await CreditLedger.create([{
@@ -211,13 +252,13 @@ router.post("/mint", async (req: Request, res: Response) => {
       referenceId: mintRequest[0]._id.toString(),
       idempotencyKey: `spend-${idemKey}`,
       meta: { prompt, theme, category }
-    }], { session });
+    }], session ? { session: session } : {});
 
     // Unlock wallet (deduct from lockedBalance)
     await CreditWallet.updateOne(
       { userId },
       { $inc: { lockedBalance: -finalPriceCredits } },
-      { session }
+      session ? { session } : {}
     );
 
     // === Mint Receipt ===
@@ -230,7 +271,7 @@ router.post("/mint", async (req: Request, res: Response) => {
       metadataUri: nftAsset[0].metadataUri,
       priceCredits: finalPriceCredits,
       ledgerEntryId: spendLedgerEntry[0]._id,
-    }], { session });
+    }], session ? { session: session } : {});
 
     // === Ledger Entry: CREDIT (offset back if failed, not needed here) ===
 
@@ -247,10 +288,31 @@ router.post("/mint", async (req: Request, res: Response) => {
         priceCredits: finalPriceCredits,
         receiptId: mintReceipt[0]._id
       }
-    }], { session });
+    }], session ? { session: session } : {});
 
-    await session.commitTransaction();
-    session.endSession();
+    // === Add NFT to Hero's Collection ===
+    // Add tokenId to hero's equippedNftIds (heroId should match userId)
+    try {
+      await Hero.findOneAndUpdate(
+        { heroId: userId },
+        { 
+          $addToSet: { equippedNftIds: tokenId },
+          $setOnInsert: { heroId: userId }
+        },
+        { upsert: true, ...(session ? { session: session } : {}) }
+      );
+      console.log(`✅ Added NFT ${tokenId} to hero ${userId}'s collection`);
+    } catch (heroError: any) {
+      console.error("⚠️ Failed to add NFT to hero collection (continuing anyway):", heroError.message);
+      // Don't fail the mint if hero update fails - NFT is still saved
+    }
+
+    if (useTransactions && session) {
+      await session.commitTransaction();
+      session.endSession();
+    } else if (session) {
+      session.endSession();
+    }
 
     return res.status(200).json({
       ok: true,
@@ -262,10 +324,14 @@ router.post("/mint", async (req: Request, res: Response) => {
     });
 
   } catch (error: any) {
-    try {
-      await session.abortTransaction();
-    } catch {}
-    session.endSession();
+    if (session) {
+      try {
+        if (useTransactions) {
+          await session.abortTransaction();
+        }
+      } catch {}
+      session.endSession();
+    }
 
     console.error("NFT mint error:", error);
 

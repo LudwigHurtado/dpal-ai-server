@@ -315,6 +315,7 @@ export interface Hero {
     path: HeroPath;
     hasMadeFirstPurchase?: boolean;
     unlockedItemSkus: string[];
+    equippedNftIds?: string[];
     activeParcels: QrParcel[];
     subscriptionTier: SubscriptionTier;
     subscriptionRenewal?: number;

@@ -50,6 +50,7 @@ type InventoryItem = {
 type HeroWithInventory = Hero & {
   inventory?: InventoryItem[];
   unlockedItemSkus?: string[];
+  equippedNftIds?: string[];
 };
 // --- END UPDATED HERO INVENTORY TYPES ---
 
@@ -457,11 +458,15 @@ const App: React.FC = () => {
                   imageUrls: result.imageUrl ? [result.imageUrl] : []
                 };
 
-                // Update hero credits
-                setHero(prev => ({
-                  ...prev,
-                  heroCredits: (prev.heroCredits || 0) - (result.priceCredits || 500)
-                }));
+                // Update hero credits and add NFT to collection
+                setHero(prev => {
+                  const currentNftIds = (prev as HeroWithInventory).equippedNftIds || [];
+                  return {
+                    ...prev,
+                    heroCredits: (prev.heroCredits || 0) - (result.priceCredits || 500),
+                    equippedNftIds: [...currentNftIds, result.tokenId]
+                  };
+                });
 
                 return mintedReport;
 
