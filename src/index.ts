@@ -147,7 +147,10 @@ app.use("/api/store", storeRoutes);
 // Legacy/compat mint endpoints
 app.post("/api/mint", (req: Request, res: Response) => void mintRoute(req, res));
 app.post("/api/test/mint", (req: Request, res: Response) => void testMintRoute(req, res));
-app.get("/api/assets/:tokenId.png", (req: Request, res: Response) =>
+
+// Image asset serving - allow CORS for images
+app.options("/api/assets/:tokenId.png", cors(corsOptions));
+app.get("/api/assets/:tokenId.png", cors(corsOptions), (req: Request, res: Response) =>
   void serveAssetImageRoute(req, res)
 );
 

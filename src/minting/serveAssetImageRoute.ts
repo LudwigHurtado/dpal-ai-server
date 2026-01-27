@@ -10,6 +10,8 @@ export async function serveAssetImageRoute(req: Request, res: Response) {
 
     const { buffer, mimeType } = await serveAssetImage(tokenId);
 
+    // CORS headers are handled by the cors middleware in index.ts
+    // Additional headers for image serving
     res.setHeader("Content-Type", mimeType);
     res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
     return res.status(200).send(buffer);
