@@ -25,7 +25,23 @@ router.get("/test", (_req: Request, res: Response) => {
  * Implements full wallet/credit system with transactions and audit logging
  */
 router.post("/mint", async (req: Request, res: Response) => {
-  await connectDb();
+  // Attempt to connect to MongoDB
+  const connected = await connectDb();
+
+  // Check if MongoDB is connected before proceeding
+  if (!connected || mongoose.connection.readyState !== 1) {
+    return res.status(503).json({
+      error: "database_unavailable",
+      message: "Database connection is not available. Please check MongoDB configuration and ensure MONGODB_URI is set correctly in Railway.",
+      details: {
+        connectionState: mongoose.connection.readyState,
+        stateName: mongoose.connection.readyState === 0 ? 'disconnected' : 
+                   mongoose.connection.readyState === 1 ? 'connected' :
+                   mongoose.connection.readyState === 2 ? 'connecting' : 'disconnecting',
+        hasUri: !!process.env.MONGODB_URI || !!process.env.MONGO_URL,
+      },
+    });
+  }
 
   // For atomicity, wrap operation in a DB transaction/session
   const session = await mongoose.startSession();
@@ -276,6 +292,14 @@ router.post("/mint", async (req: Request, res: Response) => {
       return res.status(500).json({
         error: "configuration_error",
         message: "AI service is not properly configured",
+      });
+    }
+
+    // MongoDB connection errors
+    if (error.name === "MongoNetworkError" || error.message?.includes("buffering timed out") || error.message?.includes("MongoServerError")) {
+      return res.status(503).json({
+        error: "database_unavailable",
+        message: "Database connection failed. Please check MongoDB configuration and ensure MONGODB_URI is set correctly.",
       });
     }
 

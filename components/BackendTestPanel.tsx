@@ -96,12 +96,22 @@ const BackendTestPanel: React.FC = () => {
 
       if (healthResponse.ok) {
         const healthData = await healthResponse.json();
+        const dbStatus = healthData.database;
+        const dbMessage = dbStatus 
+          ? `\nDatabase: ${dbStatus.connected ? '✅ Connected' : '❌ Not Connected'} (${dbStatus.state || 'unknown'})`
+          : '\nDatabase: Status unknown';
+        
         testResults[1] = {
           name: 'Backend Health Check',
           status: 'success',
-          message: `✅ Backend is running!\nService: ${healthData.service || 'unknown'}\nVersion: ${healthData.version || 'unknown'}\nResponse time: ${responseTime}ms`,
+          message: `✅ Backend is running!\nService: ${healthData.service || 'unknown'}\nVersion: ${healthData.version || 'unknown'}${dbMessage}\nResponse time: ${responseTime}ms`,
           responseTime,
-          details: { url: healthUrl, status: healthResponse.status, data: healthData },
+          details: { 
+            url: healthUrl, 
+            status: healthResponse.status, 
+            data: healthData,
+            database: dbStatus || { note: 'Database status not available in health response' }
+          },
         };
       } else {
         testResults[1] = {

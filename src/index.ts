@@ -66,12 +66,21 @@ app.options("/health", cors({ origin: true }));
 app.get(
   "/health",
   cors({ origin: true }),
-  (_req: Request, res: Response) => {
+  async (_req: Request, res: Response) => {
+    const { isDbConnected, getDbState } = await import("./config/db.js");
+    const dbConnected = isDbConnected();
+    const dbState = getDbState();
+    
     res.json({
       ok: true,
       service: "dpal-ai-server",
       version: "2026-01-25-v3",
       ts: Date.now(),
+      database: {
+        connected: dbConnected,
+        state: dbState,
+        ready: dbConnected,
+      },
     });
   }
 );
