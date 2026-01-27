@@ -18,6 +18,16 @@ const CollectionCodex: React.FC<CollectionCodexProps> = ({ reports, hero, onRetu
   const [backendNfts, setBackendNfts] = useState<Report[]>([]);
   const [isLoadingBackend, setIsLoadingBackend] = useState(false);
 
+  // Debug: Log when reports prop changes
+  useEffect(() => {
+    console.log('📥 CollectionCodex: Reports prop changed:', {
+      totalReports: reports.length,
+      reportsWithEarnedNft: reports.filter(r => r.earnedNft).length,
+      reportsWithMintedNft: reports.filter(r => r.earnedNft?.source === 'minted').length,
+      allReportIds: reports.map(r => r.id)
+    });
+  }, [reports]);
+
   // Fetch NFTs from backend API
   useEffect(() => {
     const fetchBackendNfts = async () => {
@@ -88,22 +98,54 @@ const CollectionCodex: React.FC<CollectionCodexProps> = ({ reports, hero, onRetu
   }, [hero.operativeId]);
 
   // Merge local reports with backend NFTs (backend takes precedence for duplicates)
+  // IMPORTANT: Local reports (from recent mints) should always show up immediately
   const allReports = useMemo(() => {
     const backendIds = new Set(backendNfts.map(r => r.id));
     const localOnly = reports.filter(r => !backendIds.has(r.id));
-    return [...backendNfts, ...localOnly];
+    const merged = [...backendNfts, ...localOnly];
+    
+    console.log('📊 CollectionCodex: Merged reports:', {
+      backendNfts: backendNfts.length,
+      localReports: reports.length,
+      localOnly: localOnly.length,
+      total: merged.length,
+      localReportsWithEarnedNft: reports.filter(r => r.earnedNft).length
+    });
+    
+    // Log all local reports with earnedNft for debugging
+    const localWithNft = reports.filter(r => r.earnedNft);
+    if (localWithNft.length > 0) {
+      console.log('📋 Local reports with earnedNft:', localWithNft.map(r => ({
+        id: r.id,
+        title: r.title,
+        earnedNft: r.earnedNft?.source,
+        isAuthor: r.isAuthor
+      })));
+    }
+    
+    return merged;
   }, [reports, backendNfts]);
 
   const earnedNfts = useMemo(
-    () =>
-      allReports
+    () => {
+      const filtered = allReports
         .filter(
-          (r) =>
-            r.isAuthor &&
-            r.earnedNft &&
-            (r.earnedNft.source === 'report' || r.earnedNft.source === 'minted')
+          (r) => {
+            const hasEarnedNft = r.earnedNft && (r.earnedNft.source === 'report' || r.earnedNft.source === 'minted');
+            const isAuthor = r.isAuthor;
+            return isAuthor && hasEarnedNft;
+          }
         )
-        .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()),
+        .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+      
+      console.log('✅ CollectionCodex: Filtered earnedNfts:', filtered.length, filtered.map(r => ({
+        id: r.id,
+        title: r.title,
+        source: r.earnedNft?.source
+      })));
+      
+      return filtered;
+    },
     [allReports]
   );
 
