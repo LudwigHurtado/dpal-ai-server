@@ -3,7 +3,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { type Report, type CharacterNft } from '../types';
 import { useTranslations } from '../i18n';
 import { CATEGORIES_WITH_ICONS } from '../constants';
-import { QrCode } from './icons';
+import { QrCode, Gem } from './icons';
 import QrCodeDisplay from './QrCodeDisplay';
 
 interface NftCardProps {
@@ -27,6 +27,18 @@ const NftCard: React.FC<NftCardProps> = ({ report, characterNft }) => {
             ? displayData.imageUrl
             : `${apiBase}${displayData.imageUrl}`)
         : '';
+
+    // Debug: Log the image URL resolution
+    useEffect(() => {
+        if (displayData?.imageUrl) {
+            console.log('🖼️ NftCard: Image URL resolution:', {
+                original: displayData.imageUrl,
+                apiBase: apiBase,
+                resolved: resolvedImageUrl,
+                envVar: (import.meta as any).env?.VITE_API_BASE || '(not set, using default)'
+            });
+        }
+    }, [displayData?.imageUrl, apiBase, resolvedImageUrl]);
 
     useEffect(() => {
         const card = cardRef.current;
