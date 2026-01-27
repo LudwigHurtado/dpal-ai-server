@@ -157,13 +157,52 @@ const CollectionCodex: React.FC<CollectionCodexProps> = ({ reports, hero, onRetu
     [reports]
   );
 
-  // Force refresh when reports change
-  const refreshKey = useMemo(() => {
-    return `${reports.length}-${reports.filter(r => r.earnedNft).length}-${Date.now()}`;
-  }, [reports]);
+  // Manual refresh function
+  const handleRefresh = () => {
+    console.log('🔄 Manual refresh triggered');
+    const userId = hero.operativeId || 'default';
+    setIsLoadingBackend(true);
+    getNftReceipts(userId)
+      .then(receipts => {
+        console.log('🔄 Refresh: Received receipts:', receipts.length);
+        const nftReports: Report[] = receipts.map((receipt) => ({
+          id: `nft-${receipt.tokenId}`,
+          title: `MINTED NFT`,
+          description: `NFT artifact. Token ID: ${receipt.tokenId}`,
+          category: 'Other' as Category,
+          location: 'DPAL Network',
+          timestamp: new Date(receipt.createdAt || receipt.mintedAt || Date.now()),
+          hash: receipt.txHash,
+          blockchainRef: receipt.txHash,
+          isAuthor: true,
+          status: 'Submitted',
+          trustScore: 100,
+          severity: 'Informational',
+          isActionable: false,
+          imageUrls: [`/api/assets/${receipt.tokenId}.png`],
+          earnedNft: {
+            source: 'minted',
+            title: `NFT ${receipt.tokenId}`,
+            imageUrl: `/api/assets/${receipt.tokenId}.png`,
+            mintCategory: 'Other' as Category,
+            blockNumber: 0,
+            txHash: receipt.txHash,
+            rarity: 'Rare' as NftRarity,
+            grade: 'A',
+          },
+        }));
+        setBackendNfts(nftReports);
+      })
+      .catch(error => {
+        console.error('🔄 Refresh error:', error);
+      })
+      .finally(() => {
+        setIsLoadingBackend(false);
+      });
+  };
 
   return (
-    <div key={refreshKey} className="animate-fade-in">
+    <div className="animate-fade-in">
       <div className="flex items-center justify-between mb-4">
         <button
           onClick={onReturn}
@@ -173,12 +212,9 @@ const CollectionCodex: React.FC<CollectionCodexProps> = ({ reports, hero, onRetu
           <span>{t('collectionCodex.returnToHeroHub')}</span>
         </button>
         <button
-          onClick={() => {
-            console.log('🔄 Manual refresh triggered');
-            window.location.reload();
-          }}
-          className="inline-flex items-center space-x-2 text-xs font-semibold text-skin-muted hover:text-skin-base transition-colors px-3 py-1 border border-skin-panel rounded"
-          title="Refresh to see latest NFTs"
+          onClick={handleRefresh}
+          className="inline-flex items-center space-x-2 text-xs font-semibold text-skin-muted hover:text-skin-base transition-colors px-3 py-1 border border-skin-panel rounded hover:bg-skin-panel"
+          title="Refresh NFTs from backend"
         >
           <span>🔄</span>
           <span>Refresh</span>
