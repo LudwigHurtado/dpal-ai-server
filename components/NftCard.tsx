@@ -25,48 +25,76 @@ const NftCard: React.FC<NftCardProps> = ({ report, characterNft }) => {
 
     // Normalize image URL so relative paths like \"/api/assets/...\" load from
     // the backend API base instead of the Vercel frontend origin.
-    // FIX: Also handle /v1/assets/ paths and api.dpal.net URLs
+    // FIX: Force all URLs to use our Railway backend, regardless of what's stored
     const resolvedImageUrl = displayData?.imageUrl
         ? (() => {
-            let url = displayData.imageUrl;
+            let url = String(displayData.imageUrl).trim();
             
-            // Fix: Replace any api.dpal.net URLs with our backend
+            // CRITICAL FIX: If URL contains api.dpal.net, extract tokenId and rebuild
             if (url.includes('api.dpal.net')) {
-                url = url.replace(/https?:\/\/[^\/]+/, '');
+                // Extract tokenId from URL (e.g., DPAL-1769527702858-dd12cf3cd8cb1066)
+                const tokenIdMatch = url.match(/DPAL-[^\/\.]+/);
+                if (tokenIdMatch) {
+                    url = `/api/assets/${tokenIdMatch[0]}.png`;
+                } else {
+                    // Fallback: try to extract from path
+                    url = url.replace(/https?:\/\/[^\/]+/, '').replace('/v1/assets/', '/api/assets/');
+                }
             }
-            
             // Fix: Replace /v1/assets/ with /api/assets/
-            if (url.includes('/v1/assets/')) {
+            else if (url.includes('/v1/assets/')) {
                 url = url.replace('/v1/assets/', '/api/assets/');
             }
-            
-            // If it's already a full URL, return it (but only if it's our backend)
-            if (url.startsWith('http')) {
-                // If it's pointing to our backend, use it as-is
-                if (url.includes('web-production-a27b.up.railway.app') || url.includes(apiBase)) {
-                    return url;
-                }
-                // Otherwise, extract just the path
+            // If it's a full URL pointing to wrong domain, extract path
+            else if (url.startsWith('http') && !url.includes('web-production-a27b.up.railway.app') && !url.includes(apiBase.replace('https://', '').replace('http://', ''))) {
                 try {
                     const urlObj = new URL(url);
                     url = urlObj.pathname;
+                    // Ensure /api/assets/ path
+                    if (url.includes('/v1/assets/')) {
+                        url = url.replace('/v1/assets/', '/api/assets/');
+                    }
                 } catch {
-                    // If URL parsing fails, try to extract path manually
-                    url = url.replace(/https?:\/\/[^\/]+/, '');
+                    // If URL parsing fails, extract tokenId and rebuild
+                    const tokenIdMatch = url.match(/DPAL-[^\/\.]+/);
+                    if (tokenIdMatch) {
+                        url = `/api/assets/${tokenIdMatch[0]}.png`;
+                    } else {
+                        url = url.replace(/https?:\/\/[^\/]+/, '');
+                    }
                 }
             }
+            // If it's already pointing to our backend, use as-is
+            else if (url.startsWith('http') && (url.includes('web-production-a27b.up.railway.app') || url.includes(apiBase.replace('https://', '').replace('http://', '')))) {
+                return url; // Already correct
+            }
             
-            // Ensure it starts with /api/assets/
+            // Ensure it starts with /api/assets/ (not /v1/assets/)
             if (!url.startsWith('/api/assets/')) {
                 // Try to extract tokenId and rebuild URL
                 const tokenIdMatch = url.match(/DPAL-[^\/\.]+/);
                 if (tokenIdMatch) {
                     url = `/api/assets/${tokenIdMatch[0]}.png`;
+                } else if (url.startsWith('/')) {
+                    // Already a path, just ensure it's /api/assets/
+                    if (url.includes('assets')) {
+                        url = url.replace(/\/v1\/assets\//, '/api/assets/').replace(/\/assets\//, '/api/assets/');
+                    }
                 }
             }
             
             // Prepend apiBase to relative paths
-            return url.startsWith('/') ? `${apiBase}${url}` : `${apiBase}/${url}`;
+            const finalUrl = url.startsWith('/') ? `${apiBase}${url}` : `${apiBase}/${url}`;
+            
+            // Final safety check: if somehow we still have api.dpal.net, force rebuild
+            if (finalUrl.includes('api.dpal.net')) {
+                const tokenIdMatch = finalUrl.match(/DPAL-[^\/\.]+/);
+                if (tokenIdMatch) {
+                    return `${apiBase}/api/assets/${tokenIdMatch[0]}.png`;
+                }
+            }
+            
+            return finalUrl;
         })()
         : '';
 
