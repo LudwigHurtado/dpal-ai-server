@@ -89,12 +89,19 @@ router.post("/mint", async (req: Request, res: Response) => {
     const idemKey = idempotencyKey || `mint-${userId}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
     // === Check for in-progress or duplicate mint (idempotency) ===
+    // If we already have a receipt for this idempotency key, treat this
+    // as a successful repeat and return the existing mint instead of
+    // blocking the user with an error.
     const existingReceipt = await MintReceipt.findOne({ userId, idempotencyKey: idemKey });
     if (existingReceipt) {
-      return res.status(409).json({
-        error: "mint_in_progress",
-        message: "A mint request with this idempotency key was already processed",
-        receipt: existingReceipt
+      return res.status(200).json({
+        ok: true,
+        tokenId: existingReceipt.tokenId,
+        imageUrl: `/api/assets/${existingReceipt.tokenId}.png`,
+        txHash: existingReceipt.txHash,
+        priceCredits: existingReceipt.priceCredits,
+        mintedAt: existingReceipt.createdAt,
+        duplicate: true,
       });
     }
 

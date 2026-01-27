@@ -451,11 +451,22 @@ const App: React.FC = () => {
                   timestamp: new Date(result.mintedAt || Date.now()),
                   hash: result.txHash || `0x${Math.random().toString(16).slice(2)}`,
                   blockchainRef: result.txHash || '',
+                  isAuthor: true,
                   status: 'Submitted',
                   trustScore: 100,
                   severity: 'Informational',
                   isActionable: false,
-                  imageUrls: result.imageUrl ? [result.imageUrl] : []
+                  imageUrls: result.imageUrl ? [result.imageUrl] : [],
+                  earnedNft: {
+                    source: 'minted',
+                    title: prompt,
+                    imageUrl: result.imageUrl,
+                    mintCategory: category,
+                    blockNumber: 0,
+                    txHash: result.txHash,
+                    rarity: NftRarity.Rare,
+                    grade: 'A',
+                  },
                 };
 
                 // Update hero credits and add NFT to collection
@@ -467,6 +478,10 @@ const App: React.FC = () => {
                     equippedNftIds: [...currentNftIds, result.tokenId]
                   };
                 });
+
+                // Add minted NFT to local report collection so it appears in
+                // Asset_Archive / Tactical_Vault views
+                setReports(prev => [mintedReport, ...prev]);
 
                 return mintedReport;
 
