@@ -157,15 +157,33 @@ const CollectionCodex: React.FC<CollectionCodexProps> = ({ reports, hero, onRetu
     [reports]
   );
 
+  // Force refresh when reports change
+  const refreshKey = useMemo(() => {
+    return `${reports.length}-${reports.filter(r => r.earnedNft).length}-${Date.now()}`;
+  }, [reports]);
+
   return (
-    <div className="animate-fade-in">
-      <button
-        onClick={onReturn}
-        className="inline-flex items-center space-x-2 text-sm font-semibold text-skin-muted hover:text-skin-base transition-colors mb-4"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        <span>{t('collectionCodex.returnToHeroHub')}</span>
-      </button>
+    <div key={refreshKey} className="animate-fade-in">
+      <div className="flex items-center justify-between mb-4">
+        <button
+          onClick={onReturn}
+          className="inline-flex items-center space-x-2 text-sm font-semibold text-skin-muted hover:text-skin-base transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>{t('collectionCodex.returnToHeroHub')}</span>
+        </button>
+        <button
+          onClick={() => {
+            console.log('🔄 Manual refresh triggered');
+            window.location.reload();
+          }}
+          className="inline-flex items-center space-x-2 text-xs font-semibold text-skin-muted hover:text-skin-base transition-colors px-3 py-1 border border-skin-panel rounded"
+          title="Refresh to see latest NFTs"
+        >
+          <span>🔄</span>
+          <span>Refresh</span>
+        </button>
+      </div>
 
       <header className="mb-8 text-center">
         <h1 className="text-4xl font-extrabold text-skin-base tracking-tight">
