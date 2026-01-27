@@ -21,10 +21,15 @@ const CollectionCodex: React.FC<CollectionCodexProps> = ({ reports, hero, onRetu
   // Fetch NFTs from backend API
   useEffect(() => {
     const fetchBackendNfts = async () => {
-      if (!hero.operativeId) return;
+      // Use operativeId or fallback to 'default' for testing
+      const userId = hero.operativeId || 'default';
+      console.log('🔍 CollectionCodex: Fetching NFTs for userId:', userId);
+      
       setIsLoadingBackend(true);
       try {
-        const receipts = await getNftReceipts(hero.operativeId);
+        const receipts = await getNftReceipts(userId);
+        console.log('✅ CollectionCodex: Received receipts:', receipts.length, receipts);
+        
         // Convert receipts to Report format for display
         const nftReports: Report[] = receipts.map((receipt) => ({
           id: `nft-${receipt.tokenId}`,
@@ -52,9 +57,11 @@ const CollectionCodex: React.FC<CollectionCodexProps> = ({ reports, hero, onRetu
             grade: 'A',
           },
         }));
+        console.log('✅ CollectionCodex: Converted to reports:', nftReports.length);
         setBackendNfts(nftReports);
-      } catch (error) {
-        console.error('Failed to fetch backend NFTs:', error);
+      } catch (error: any) {
+        console.error('❌ CollectionCodex: Failed to fetch backend NFTs:', error);
+        console.error('Error details:', error?.message, error?.response, error?.stack);
       } finally {
         setIsLoadingBackend(false);
       }
@@ -165,7 +172,13 @@ const CollectionCodex: React.FC<CollectionCodexProps> = ({ reports, hero, onRetu
       </div>
 
       {activeTab === 'rewards' && (
-        earnedNfts.length > 0 ? (
+        isLoadingBackend ? (
+          <div className="text-center text-skin-muted py-20 bg-skin-panel border border-skin-panel rounded-lg">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-skin-primary mx-auto mb-4"></div>
+            <h3 className="text-xl font-semibold text-skin-base">Loading NFTs...</h3>
+            <p className="mt-2 max-w-sm mx-auto">Fetching from backend...</p>
+          </div>
+        ) : earnedNfts.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {earnedNfts.map((report) => (
               <NftCard key={report.id} report={report} />
@@ -176,6 +189,9 @@ const CollectionCodex: React.FC<CollectionCodexProps> = ({ reports, hero, onRetu
             <Award className="w-20 h-20 text-gray-700 mx-auto mb-4" />
             <h3 className="text-xl font-semibold text-skin-base">{t('collectionCodex.noNftsTitle')}</h3>
             <p className="mt-2 max-w-sm mx-auto">{t('collectionCodex.noNftsSubtitle')}</p>
+            <p className="mt-4 text-xs text-skin-muted">
+              Debug: userId={hero.operativeId || 'default'}, backendNfts={backendNfts.length}, localReports={reports.filter(r => r.earnedNft).length}
+            </p>
           </div>
         )
       )}
