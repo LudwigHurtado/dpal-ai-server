@@ -203,7 +203,7 @@ export async function purchaseIapPack(params: {
 }
 
 /**
- * Get NFT receipts for a user
+ * Get NFT receipts for a user (or all receipts if userId is empty)
  */
 export async function getNftReceipts(userId: string): Promise<Array<{
   _id: string;
@@ -214,7 +214,10 @@ export async function getNftReceipts(userId: string): Promise<Array<{
   createdAt: string;
   mintedAt?: string;
 }>> {
-  return apiRequest(`/api/nft/receipts?userId=${encodeURIComponent(userId)}`, {
+  const url = userId 
+    ? `/api/nft/receipts?userId=${encodeURIComponent(userId)}`
+    : `/api/nft/receipts`;
+  return apiRequest(url, {
     method: 'GET',
   });
 }

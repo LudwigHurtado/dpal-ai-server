@@ -23,12 +23,29 @@ const CollectionCodex: React.FC<CollectionCodexProps> = ({ reports, hero, onRetu
     const fetchBackendNfts = async () => {
       // Use operativeId or fallback to 'default' for testing
       const userId = hero.operativeId || 'default';
-      console.log('🔍 CollectionCodex: Fetching NFTs for userId:', userId);
+      console.log('🔍 CollectionCodex: Fetching NFTs for userId:', userId, 'hero.operativeId:', hero.operativeId);
       
       setIsLoadingBackend(true);
       try {
-        const receipts = await getNftReceipts(userId);
-        console.log('✅ CollectionCodex: Received receipts:', receipts.length, receipts);
+        // First, try to fetch with the specific userId
+        let receipts = await getNftReceipts(userId);
+        console.log('✅ CollectionCodex: Received receipts for', userId, ':', receipts.length, receipts);
+        
+        // If no receipts found, also try fetching all receipts (for debugging)
+        if (receipts.length === 0) {
+          console.log('⚠️ No receipts for userId, trying to fetch all receipts...');
+          try {
+            const allReceipts = await getNftReceipts(''); // Empty string fetches all
+            console.log('📋 All receipts in database:', allReceipts.length, allReceipts);
+            // If we got all receipts, filter by userId manually
+            if (Array.isArray(allReceipts)) {
+              receipts = allReceipts.filter((r: any) => r.userId === userId);
+              console.log('✅ Filtered receipts for', userId, ':', receipts.length);
+            }
+          } catch (allError) {
+            console.warn('Could not fetch all receipts:', allError);
+          }
+        }
         
         // Convert receipts to Report format for display
         const nftReports: Report[] = receipts.map((receipt) => ({
