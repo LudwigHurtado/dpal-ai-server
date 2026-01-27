@@ -541,9 +541,6 @@ const App: React.FC = () => {
           </div>
         </div>
       )}
-
-      {/* Backend Test Panel - Always visible for debugging */}
-      <BackendTestPanel />
     </div>
   );
 };

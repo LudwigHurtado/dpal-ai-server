@@ -20,6 +20,14 @@ const NftCard: React.FC<NftCardProps> = ({ report, characterNft }) => {
     const isCharacter = !!characterNft;
     const displayData = isCharacter ? characterNft : nft;
 
+    // Normalize image URL so relative paths like \"/api/assets/...\" load from
+    // the backend API base instead of the Vercel frontend origin.
+    const resolvedImageUrl = displayData?.imageUrl
+        ? (displayData.imageUrl.startsWith('http')
+            ? displayData.imageUrl
+            : `${apiBase}${displayData.imageUrl}`)
+        : '';
+
     useEffect(() => {
         const card = cardRef.current;
         if (!card) return;
@@ -40,7 +48,7 @@ const NftCard: React.FC<NftCardProps> = ({ report, characterNft }) => {
         return (
             <div ref={cardRef} className="nft-card-container group relative w-full max-w-sm mx-auto rounded-2xl overflow-hidden bg-gray-800 shadow-2xl transition-transform duration-300 hover:scale-105 p-2 bg-gradient-to-br from-amber-300 via-amber-500 to-amber-700">
                 <div className="relative w-full h-full rounded-lg overflow-hidden">
-                    <img src={displayData.imageUrl} alt={displayData.title} className="w-full h-full object-cover aspect-[4/5]" />
+                    <img src={resolvedImageUrl} alt={displayData.title} className="w-full h-full object-cover aspect-[4/5]" />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent pointer-events-none"></div>
                     <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
                         <h3 className="font-bold text-xl leading-tight drop-shadow-lg">{displayData.title}</h3>
@@ -66,7 +74,7 @@ const NftCard: React.FC<NftCardProps> = ({ report, characterNft }) => {
     return (
         <div ref={cardRef} className="nft-card-container group relative w-full max-w-sm mx-auto rounded-2xl overflow-hidden bg-gray-800 shadow-2xl transition-transform duration-300 hover:scale-105 p-2 bg-gradient-to-br from-amber-300 via-amber-500 to-amber-700">
             <div className="relative w-full h-full rounded-lg overflow-hidden">
-                <img src={displayData.imageUrl} alt={displayData.title} className="w-full h-full object-cover aspect-[4/5]" />
+                <img src={resolvedImageUrl} alt={displayData.title} className="w-full h-full object-cover aspect-[4/5]" />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent pointer-events-none"></div>
 
                 <div className="absolute top-0 left-0 right-0 p-3 bg-black/40 backdrop-blur-sm flex items-center justify-between">
