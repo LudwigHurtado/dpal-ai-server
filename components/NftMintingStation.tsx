@@ -13,9 +13,10 @@ interface NftMintingStationProps {
   setHero: React.Dispatch<React.SetStateAction<Hero>>;
   onMintNft: (prompt: string, theme: NftTheme, dpalCategory: Category, extra?: any) => Promise<Report>;
   reports: Report[];
+  onViewCollection?: () => void;
 }
 
-const NftMintingStation: React.FC<NftMintingStationProps> = ({ hero, setHero, onMintNft, reports }) => {
+const NftMintingStation: React.FC<NftMintingStationProps> = ({ hero, setHero, onMintNft, reports, onViewCollection }) => {
   const { t } = useTranslations();
   
   // Synthesis Lab State
@@ -312,6 +313,32 @@ const NftMintingStation: React.FC<NftMintingStationProps> = ({ hero, setHero, on
                         <div className="bg-zinc-900/60 p-5 rounded-2xl border border-zinc-800 text-center">
                             <p className="text-[9px] font-black text-zinc-600 uppercase mb-1">Block_Height</p>
                             <p className="text-sm font-mono text-cyan-600">#{Math.floor(Math.random() * 100000) + 6843000}</p>
+                        </div>
+                        <div className="flex flex-col sm:flex-row gap-4 pt-4">
+                            <button
+                                onClick={() => {
+                                    setMintedReport(null);
+                                    setStep(1);
+                                    setSelectedConcept(null);
+                                    setSelectedMaterials([]);
+                                    setSelectedTraits([]);
+                                    setTheme('');
+                                    setDpalCategory('');
+                                }}
+                                className="flex-1 bg-white text-black font-black py-4 rounded-2xl uppercase tracking-[0.2em] text-xs shadow-lg active:scale-95 transition-all hover:bg-zinc-100"
+                            >
+                                MINT_ANOTHER
+                            </button>
+                            <button
+                                onClick={() => {
+                                    if (onViewCollection) {
+                                        onViewCollection();
+                                    }
+                                }}
+                                className="flex-1 bg-zinc-900 border-2 border-cyan-500 text-white font-black py-4 rounded-2xl uppercase tracking-[0.2em] text-xs shadow-lg active:scale-95 transition-all hover:bg-zinc-800 hover:border-cyan-400"
+                            >
+                                VIEW_COLLECTION
+                            </button>
                         </div>
                     </div>
                 ) : (

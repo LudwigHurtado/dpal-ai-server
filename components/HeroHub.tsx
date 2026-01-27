@@ -352,7 +352,7 @@ const HeroHub: React.FC<HeroHubProps> = ({
             )}
 
             {activeTab === 'collection' && <CollectionCodex reports={reports} hero={hero} onReturn={() => setActiveTab('missions')} />}
-            {activeTab === 'mint' && <NftMintingStation hero={hero} setHero={setHero} onMintNft={onMintNft} reports={reports} />}
+            {activeTab === 'mint' && <NftMintingStation hero={hero} setHero={setHero} onMintNft={onMintNft} reports={reports} onViewCollection={() => setActiveTab('collection')} />}
             {activeTab === 'store' && <StoreView hero={hero} iapPacks={iapPacks} storeItems={storeItems} onInitiateHCPurchase={onInitiateHCPurchase} onInitiateStoreItemPurchase={onInitiateStoreItemPurchase} onReturn={() => setActiveTab('missions')} isEmbedded />}
             {activeTab === 'vault' && <TacticalVault hero={hero} setHero={setHero} onReturn={() => setActiveTab('missions')} reports={reports} />}
         </div>
