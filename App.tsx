@@ -102,12 +102,14 @@ const getInitialHero = (): HeroWithInventory => {
       // Add inventory/unlockedItemSkus if missing for migration
       if (!parsed.inventory) parsed.inventory = [];
       if (!parsed.unlockedItemSkus) parsed.unlockedItemSkus = [];
+      // Ensure a generous test balance so the operative can always mint
+      parsed.heroCredits = Math.max(parsed.heroCredits || 0, 100000);
       return parsed; 
     } catch (e) { 
-      return { ...INITIAL_HERO_PROFILE, inventory: [], unlockedItemSkus: [] }; 
+      return { ...INITIAL_HERO_PROFILE, inventory: [], unlockedItemSkus: [], heroCredits: 100000 }; 
     } 
   }
-  return { ...INITIAL_HERO_PROFILE, inventory: [], unlockedItemSkus: [] };
+  return { ...INITIAL_HERO_PROFILE, inventory: [], unlockedItemSkus: [], heroCredits: 100000 };
 };
 
 const App: React.FC = () => {
