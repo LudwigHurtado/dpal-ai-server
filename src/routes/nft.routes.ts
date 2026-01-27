@@ -427,6 +427,11 @@ router.post("/generate-image", async (req: Request, res: Response) => {
 /**
  * GET /api/nft/receipts
  * Get all NFT receipts (optionally filtered by userId)
+ *
+ * IMPORTANT:
+ * - MintReceipt docs do not store image fields.
+ * - The UI needs an image URL to render the NFT card.
+ * - Enrich each receipt with imageUrl/imageUri from NftAsset (fallback to /api/assets/:tokenId.png)
  */
 router.get("/receipts", async (req: Request, res: Response) => {
   try {
@@ -437,7 +442,32 @@ router.get("/receipts", async (req: Request, res: Response) => {
 
     const receipts = await MintReceipt.find(query).sort({ createdAt: -1 }).limit(100).lean();
 
-    return res.status(200).json(receipts);
+    // Extract tokenIds to look up corresponding NftAsset documents
+    const tokenIds = receipts.map((r: any) => r.tokenId).filter(Boolean);
+
+    // Fetch NftAsset documents to get imageUri
+    const assets = tokenIds.length
+      ? await NftAsset.find({ tokenId: { $in: tokenIds } })
+          .select({ tokenId: 1, imageUri: 1 })
+          .lean()
+      : [];
+
+    // Create a map for quick lookup
+    const assetMap = new Map<string, any>(assets.map((a: any) => [a.tokenId, a]));
+
+    // Enrich receipts with imageUrl/imageUri
+    const enriched = receipts.map((r: any) => {
+      const asset = assetMap.get(r.tokenId);
+      // Use asset's imageUri if available, otherwise construct the standard path
+      const imagePath = (asset?.imageUri as string) || `/api/assets/${r.tokenId}.png`;
+      return {
+        ...r,
+        imageUri: imagePath,
+        imageUrl: imagePath,
+      };
+    });
+
+    return res.status(200).json(enriched);
   } catch (e: any) {
     console.error("Get receipts error:", e);
     return res.status(500).json({
