@@ -231,7 +231,7 @@ const CollectionCodex: React.FC<CollectionCodexProps> = ({ reports, hero, onRetu
       </div>
 
       {activeTab === 'rewards' && (
-        isLoadingBackend ? (
+        isLoadingBackend && earnedNfts.length === 0 ? (
           <div className="text-center text-skin-muted py-20 bg-skin-panel border border-skin-panel rounded-lg">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-skin-primary mx-auto mb-4"></div>
             <h3 className="text-xl font-semibold text-skin-base">Loading NFTs...</h3>
@@ -248,9 +248,22 @@ const CollectionCodex: React.FC<CollectionCodexProps> = ({ reports, hero, onRetu
             <Award className="w-20 h-20 text-gray-700 mx-auto mb-4" />
             <h3 className="text-xl font-semibold text-skin-base">{t('collectionCodex.noNftsTitle')}</h3>
             <p className="mt-2 max-w-sm mx-auto">{t('collectionCodex.noNftsSubtitle')}</p>
-            <p className="mt-4 text-xs text-skin-muted">
-              Debug: userId={hero.operativeId || 'default'}, backendNfts={backendNfts.length}, localReports={reports.filter(r => r.earnedNft).length}
-            </p>
+            <div className="mt-4 text-xs text-skin-muted space-y-1">
+              <p>Debug Info:</p>
+              <p>userId: {hero.operativeId || 'default'}</p>
+              <p>backendNfts: {backendNfts.length}</p>
+              <p>localReports (total): {reports.length}</p>
+              <p>localReports (with earnedNft): {reports.filter(r => r.earnedNft).length}</p>
+              <p>localReports (minted): {reports.filter(r => r.earnedNft?.source === 'minted').length}</p>
+              <p>allReports (merged): {allReports.length}</p>
+              <p>earnedNfts (filtered): {earnedNfts.length}</p>
+              {reports.filter(r => r.earnedNft).length > 0 && (
+                <div className="mt-2 p-2 bg-yellow-900/20 rounded">
+                  <p className="text-yellow-400 font-semibold">⚠️ Local reports with earnedNft found but not showing!</p>
+                  <p className="text-xs mt-1">Check console for filtering details</p>
+                </div>
+              )}
+            </div>
           </div>
         )
       )}
