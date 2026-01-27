@@ -443,6 +443,25 @@ const App: React.FC = () => {
                   traits: extra?.traits || [],
                 });
 
+                // Normalize imageUrl - ensure it's a relative path, not api.dpal.net
+                let normalizedImageUrl = result.imageUrl || `/api/assets/${result.tokenId}.png`;
+                
+                // Fix: Remove any api.dpal.net or wrong domains
+                if (normalizedImageUrl.includes('api.dpal.net') || normalizedImageUrl.includes('/v1/assets/')) {
+                  // Extract tokenId and rebuild
+                  const tokenIdMatch = normalizedImageUrl.match(/DPAL-[^\/\.\?]+/);
+                  if (tokenIdMatch) {
+                    normalizedImageUrl = `/api/assets/${tokenIdMatch[0]}.png`;
+                  } else {
+                    normalizedImageUrl = `/api/assets/${result.tokenId}.png`;
+                  }
+                }
+                
+                // Ensure it's a relative path starting with /api/assets/
+                if (!normalizedImageUrl.startsWith('/api/assets/')) {
+                  normalizedImageUrl = `/api/assets/${result.tokenId}.png`;
+                }
+
                 // Create a Report from the mint result
                 const mintedReport: Report = {
                   id: `nft-${result.tokenId}`,
@@ -458,11 +477,11 @@ const App: React.FC = () => {
                   trustScore: 100,
                   severity: 'Informational',
                   isActionable: false,
-                  imageUrls: result.imageUrl ? [result.imageUrl] : [],
+                  imageUrls: [normalizedImageUrl],
                   earnedNft: {
                     source: 'minted',
                     title: prompt,
-                    imageUrl: result.imageUrl,
+                    imageUrl: normalizedImageUrl,
                     mintCategory: category,
                     blockNumber: 0,
                     txHash: result.txHash,
