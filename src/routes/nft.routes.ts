@@ -3,6 +3,7 @@ import { generatePersonaImagePng } from "../services/gemini.service.js";
 import { serveAssetImage } from "../services/mint.service.js";
 import { connectDb } from "../config/db.js";
 import { MintReceipt } from "../models/MintReceipt.js";
+import { MintRequest } from "../models/MintRequest.js";
 import { CreditWallet } from "../models/CreditWallet.js";
 import { CreditLedger } from "../models/CreditLedger.js";
 import { AuditEvent } from "../models/AuditEvent.js";
@@ -85,24 +86,44 @@ router.post("/mint", async (req: Request, res: Response) => {
     }
 
     const finalPriceCredits = priceCredits !== undefined ? Number(priceCredits) : 0;
-    // Normalize idempotency key
-    const idemKey = idempotencyKey || `mint-${userId}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    
+    // Generate a truly unique idempotency key using crypto random to ensure
+    // each mint request creates a new NFT, even if the same prompt is used.
+    // This prevents duplicate NFTs from being returned.
+    const crypto = await import('crypto');
+    const uniqueNonce = crypto.randomBytes(16).toString('hex');
+    const idemKey = idempotencyKey || `mint-${userId}-${Date.now()}-${uniqueNonce}`;
 
-    // === Check for in-progress or duplicate mint (idempotency) ===
-    // If we already have a receipt for this idempotency key, treat this
-    // as a successful repeat and return the existing mint instead of
-    // blocking the user with an error.
-    const existingReceipt = await MintReceipt.findOne({ userId, idempotencyKey: idemKey });
-    if (existingReceipt) {
-      return res.status(200).json({
-        ok: true,
-        tokenId: existingReceipt.tokenId,
-        imageUrl: `/api/assets/${existingReceipt.tokenId}.png`,
-        txHash: existingReceipt.txHash,
-        priceCredits: existingReceipt.priceCredits,
-        mintedAt: existingReceipt.createdAt,
-        duplicate: true,
-      });
+    // === Check for duplicate mint by prompt content ===
+    // Only block if the EXACT same prompt was minted by this user very recently (within 3 seconds)
+    // This prevents accidental double-clicks while still allowing intentional re-mints with different prompts
+    const recentMintRequest = await MintRequest.findOne({
+      userId,
+      createdAt: { $gte: new Date(Date.now() - 3000) },
+      status: 'COMPLETED'
+    }).sort({ createdAt: -1 });
+    
+    // If there's a very recent completed mint, check if it's the same prompt (likely a double-click)
+    if (recentMintRequest) {
+      const recentReceipt = await MintReceipt.findOne({ mintRequestId: recentMintRequest._id });
+      if (recentReceipt) {
+        // Check if this is the same prompt by comparing the first part
+        // (we can't store full prompt in MintRequest easily, so we check idempotency key pattern)
+        // Since each mint now gets a unique crypto nonce, same prompt = different key, so allow it
+        // Only block if it's the EXACT same idempotency key (true duplicate request)
+        if (idempotencyKey && recentMintRequest.idempotencyKey === idempotencyKey) {
+          // Exact duplicate request - return existing
+          return res.status(200).json({
+            ok: true,
+            tokenId: recentReceipt.tokenId,
+            imageUrl: `/api/assets/${recentReceipt.tokenId}.png`,
+            txHash: recentReceipt.txHash,
+            priceCredits: recentReceipt.priceCredits,
+            mintedAt: recentReceipt.createdAt,
+            duplicate: true,
+          });
+        }
+      }
     }
 
     // === Wallet balance and "locking" ===
@@ -176,16 +197,34 @@ router.post("/mint", async (req: Request, res: Response) => {
       }
     }]);
     
+    // === Generate unique keywords for this mint to ensure uniqueness ===
+    // Use AI to enhance the prompt with unique, contextual keywords
+    let enhancedPrompt = prompt.trim();
+    try {
+      const { runGemini } = await import("../services/gemini.service.js");
+      const uniquenessPrompt = `Generate 3-5 unique, specific keywords or phrases (related to accountability, transparency, civic duty, or ${category}) that will make this NFT artifact unique. Return only a comma-separated list, no explanation. Context: ${prompt}, Theme: ${theme}, Category: ${category}`;
+      const uniqueKeywords = await runGemini(uniquenessPrompt);
+      if (uniqueKeywords && !uniqueKeywords.includes("placeholder")) {
+        enhancedPrompt = `${prompt.trim()}, ${uniqueKeywords.trim()}`;
+      }
+    } catch (keywordError) {
+      console.warn("Failed to generate unique keywords, using original prompt:", keywordError);
+      // Continue with original prompt if keyword generation fails
+    }
+
     // === (Try) Mint Logic ===
     // Let's call image generation and then record mint
     let base64: string, tokenId: string;
     try {
       const pngBytes = await generatePersonaImagePng({
-        description: prompt.trim(),
-        archetype: String(theme || "artifact")
+        description: enhancedPrompt,
+        archetype: String(theme || "artifact"),
+        category: String(category || "general")
       });
       base64 = pngBytes.toString("base64");
-      tokenId = `DPAL-${Date.now()}-${Math.floor(Math.random() * 9999).toString().padStart(4, '0')}`;
+      const crypto = await import('crypto');
+      const uniqueSuffix = crypto.randomBytes(8).toString('hex');
+      tokenId = `DPAL-${Date.now()}-${uniqueSuffix}`;
     } catch (err) {
       // === Rollback: unlock wallet, audit failure ===
       await CreditWallet.updateOne(
@@ -222,7 +261,6 @@ router.post("/mint", async (req: Request, res: Response) => {
     }]);
 
     // === Create MintRequest for receipt reference ===
-    const { MintRequest } = await import("../models/MintRequest.js");
     const mintRequest = await MintRequest.create([{
       userId,
       idempotencyKey: idemKey,

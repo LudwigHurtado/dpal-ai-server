@@ -14,6 +14,7 @@ const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
 export type GeneratePersonaImageInput = {
   description: string;
   archetype: string;
+  category?: string;
 };
 
 type GeminiResponse = {
@@ -83,12 +84,16 @@ export async function generatePersonaImagePng(
   ).trim();
   const url = `${GEMINI_API_BASE}/models/${model}:generateContent`;
 
-  // Construct the prompt with style instructions
+  // Construct a high-quality, photorealistic prompt for collectible NFT art
+  const categoryContext = input.category ? `Category: ${input.category}. ` : "";
   const prompt = [
     input.description,
-    `Archetype: ${input.archetype}`,
-    "Output: PNG image.",
-    "Style: clean vector portrait, centered subject, simple background, 1:1.",
+    `${categoryContext}Archetype: ${input.archetype}.`,
+    "Style: Photorealistic, ultra-high quality, 8K resolution, professional digital art, collectible NFT quality.",
+    "Visual style: Hyper-detailed, cinematic lighting, dramatic composition, museum-quality artwork.",
+    "Art direction: Realistic textures, depth of field, professional color grading, sophisticated aesthetic.",
+    "Avoid: Cartoon style, simple drawings, flat vector art, low-quality illustrations.",
+    "Output: Premium collectible digital artifact, 1:1 aspect ratio, PNG format.",
   ].join("\n");
 
   const requestBody = {
