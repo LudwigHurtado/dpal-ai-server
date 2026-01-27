@@ -51,17 +51,26 @@ router.post("/mint", async (req: Request, res: Response) => {
   
   try {
     session = await mongoose.startSession();
-    session.startTransaction();
-    useTransactions = true;
-  } catch (transactionError: any) {
-    // If transactions not supported (standalone MongoDB), proceed without them
-    if (transactionError.message?.includes("replica set") || transactionError.message?.includes("mongos")) {
-      console.warn("⚠️ MongoDB transactions not available (standalone instance). Proceeding without transactions.");
-      session = null;
-      useTransactions = false;
-    } else {
-      throw transactionError; // Re-throw if it's a different error
+    try {
+      session.startTransaction();
+      useTransactions = true;
+    } catch (txError: any) {
+      // startTransaction() failed - transactions not supported
+      if (txError.message?.includes("replica set") || txError.message?.includes("mongos")) {
+        console.warn("⚠️ MongoDB transactions not available (standalone instance). Proceeding without transactions.");
+        session.endSession();
+        session = null;
+        useTransactions = false;
+      } else {
+        session.endSession();
+        throw txError;
+      }
     }
+  } catch (sessionError: any) {
+    // startSession() itself failed - very rare, but handle it
+    console.warn("⚠️ Could not create MongoDB session. Proceeding without transactions.");
+    session = null;
+    useTransactions = false;
   }
 
   try {
