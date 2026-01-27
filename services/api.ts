@@ -203,6 +203,23 @@ export async function purchaseIapPack(params: {
 }
 
 /**
+ * Get NFT receipts for a user
+ */
+export async function getNftReceipts(userId: string): Promise<Array<{
+  _id: string;
+  userId: string;
+  tokenId: string;
+  txHash: string;
+  priceCredits: number;
+  createdAt: string;
+  mintedAt?: string;
+}>> {
+  return apiRequest(`/api/nft/receipts?userId=${encodeURIComponent(userId)}`, {
+    method: 'GET',
+  });
+}
+
+/**
  * Check if API is reachable
  */
 export async function checkApiHealth(): Promise<boolean> {

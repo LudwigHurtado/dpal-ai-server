@@ -71,10 +71,31 @@ const NftCard: React.FC<NftCardProps> = ({ report, characterNft }) => {
     const categoryInfo = report ? CATEGORIES_WITH_ICONS.find(c => c.value === (nft?.mintCategory || report.category)) : null;
     const categoryName = categoryInfo ? t(categoryInfo.translationKey) : (nft?.mintCategory || report?.category);
 
+    const [imageError, setImageError] = useState(false);
+
     return (
         <div ref={cardRef} className="nft-card-container group relative w-full max-w-sm mx-auto rounded-2xl overflow-hidden bg-gray-800 shadow-2xl transition-transform duration-300 hover:scale-105 p-2 bg-gradient-to-br from-amber-300 via-amber-500 to-amber-700">
-            <div className="relative w-full h-full rounded-lg overflow-hidden">
-                <img src={resolvedImageUrl} alt={displayData.title} className="w-full h-full object-cover aspect-[4/5]" />
+            <div className="relative w-full h-full rounded-lg overflow-hidden bg-black">
+                {!imageError && resolvedImageUrl ? (
+                    <img 
+                        src={resolvedImageUrl} 
+                        alt={displayData.title} 
+                        className="w-full h-full object-cover aspect-[4/5]" 
+                        onError={() => {
+                            console.error('NFT image failed to load:', resolvedImageUrl);
+                            setImageError(true);
+                        }}
+                    />
+                ) : (
+                    <div className="w-full h-full aspect-[4/5] flex items-center justify-center bg-gradient-to-br from-amber-900/20 to-amber-700/20">
+                        <div className="text-center p-8">
+                            <Gem className="w-16 h-16 text-amber-500/50 mx-auto mb-4" />
+                            <p className="text-xs text-amber-400/70 font-mono uppercase tracking-wider">
+                                {imageError ? 'Image unavailable' : 'Loading...'}
+                            </p>
+                        </div>
+                    </div>
+                )}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent pointer-events-none"></div>
 
                 <div className="absolute top-0 left-0 right-0 p-3 bg-black/40 backdrop-blur-sm flex items-center justify-between">

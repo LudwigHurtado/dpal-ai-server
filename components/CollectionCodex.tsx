@@ -1,9 +1,10 @@
-import React, { useMemo, useState } from 'react';
-import type { Report, CharacterNft, Hero } from '../types';
+import React, { useMemo, useState, useEffect } from 'react';
+import type { Report, CharacterNft, Hero, Category, NftRarity } from '../types';
 import { useTranslations } from '../i18n';
 import NftCard from './NftCard';
 import { ArrowLeft, Award, Coins, Gem } from './icons';
 import { LEGENDS_OF_THE_LEDGER_NFTS } from '../constants';
+import { getNftReceipts } from '../services/api';
 
 interface CollectionCodexProps {
   reports: Report[];
@@ -14,10 +15,64 @@ interface CollectionCodexProps {
 const CollectionCodex: React.FC<CollectionCodexProps> = ({ reports, hero, onReturn }) => {
   const { t } = useTranslations();
   const [activeTab, setActiveTab] = useState<'rewards' | 'badges' | 'legends'>('rewards');
+  const [backendNfts, setBackendNfts] = useState<Report[]>([]);
+  const [isLoadingBackend, setIsLoadingBackend] = useState(false);
+
+  // Fetch NFTs from backend API
+  useEffect(() => {
+    const fetchBackendNfts = async () => {
+      if (!hero.operativeId) return;
+      setIsLoadingBackend(true);
+      try {
+        const receipts = await getNftReceipts(hero.operativeId);
+        // Convert receipts to Report format for display
+        const nftReports: Report[] = receipts.map((receipt) => ({
+          id: `nft-${receipt.tokenId}`,
+          title: `MINTED NFT`,
+          description: `NFT artifact. Token ID: ${receipt.tokenId}`,
+          category: 'Other' as Category,
+          location: 'DPAL Network',
+          timestamp: new Date(receipt.createdAt || receipt.mintedAt || Date.now()),
+          hash: receipt.txHash,
+          blockchainRef: receipt.txHash,
+          isAuthor: true,
+          status: 'Submitted',
+          trustScore: 100,
+          severity: 'Informational',
+          isActionable: false,
+          imageUrls: [`/api/assets/${receipt.tokenId}.png`],
+          earnedNft: {
+            source: 'minted',
+            title: `NFT ${receipt.tokenId}`,
+            imageUrl: `/api/assets/${receipt.tokenId}.png`,
+            mintCategory: 'Other' as Category,
+            blockNumber: 0,
+            txHash: receipt.txHash,
+            rarity: 'Rare' as NftRarity,
+            grade: 'A',
+          },
+        }));
+        setBackendNfts(nftReports);
+      } catch (error) {
+        console.error('Failed to fetch backend NFTs:', error);
+      } finally {
+        setIsLoadingBackend(false);
+      }
+    };
+
+    fetchBackendNfts();
+  }, [hero.operativeId]);
+
+  // Merge local reports with backend NFTs (backend takes precedence for duplicates)
+  const allReports = useMemo(() => {
+    const backendIds = new Set(backendNfts.map(r => r.id));
+    const localOnly = reports.filter(r => !backendIds.has(r.id));
+    return [...backendNfts, ...localOnly];
+  }, [reports, backendNfts]);
 
   const earnedNfts = useMemo(
     () =>
-      reports
+      allReports
         .filter(
           (r) =>
             r.isAuthor &&
@@ -25,7 +80,7 @@ const CollectionCodex: React.FC<CollectionCodexProps> = ({ reports, hero, onRetu
             (r.earnedNft.source === 'report' || r.earnedNft.source === 'minted')
         )
         .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()),
-    [reports]
+    [allReports]
   );
 
   const badgeNfts = useMemo(
