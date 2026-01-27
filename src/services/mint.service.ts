@@ -46,9 +46,10 @@ export async function executeMintFlow(userId: string, payload: any) {
   }
 
   // 2. Ensure Wallet Exists (Provision if missing)
+  // Give new users a generous starting balance so they can mint right away.
   await CreditWallet.updateOne(
     { userId },
-    { $setOnInsert: { balance: 10000, lockedBalance: 0 } },
+    { $setOnInsert: { balance: 100000, lockedBalance: 0 } },
     { upsert: true }
   );
 

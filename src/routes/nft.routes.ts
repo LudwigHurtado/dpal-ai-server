@@ -106,10 +106,11 @@ router.post("/mint", async (req: Request, res: Response) => {
     }
 
     // === Wallet balance and "locking" ===
-    // Ensure wallet exists
+    // Ensure wallet exists with a generous starting balance so new operatives
+    // can mint immediately during testing.
     await CreditWallet.updateOne(
       { userId },
-      { $setOnInsert: { balance: 10000, lockedBalance: 0 } },
+      { $setOnInsert: { balance: 100000, lockedBalance: 0 } },
       { upsert: true }
     );
 
