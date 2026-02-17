@@ -139,6 +139,15 @@ router.post("/media", async (req: Request, res: Response) => {
     await connectDb();
     await ensureRoomExists(roomId);
 
+    const requirePersistent = String(process.env.REQUIRE_PERSISTENT_MEDIA || "true").toLowerCase() === "true";
+    if (requirePersistent && !cloudinaryConfigured()) {
+      return res.status(503).json({
+        ok: false,
+        error: "persistent_media_not_configured",
+        message: "Persistent media storage is required. Configure CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET.",
+      });
+    }
+
     const parsed = parseDataUrl(dataUrl);
     if (!parsed) {
       return res.status(400).json({ ok: false, error: "invalid_data_url" });
