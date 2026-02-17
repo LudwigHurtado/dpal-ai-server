@@ -159,7 +159,7 @@ export async function generatePersonaImagePng(
  * @example
  * const response = await runGemini("Generate a hero backstory");
  */
-export async function runGemini(prompt: string): Promise<string> {
+export async function runGemini(prompt: string, modelOverride?: string): Promise<string> {
   // Graceful degradation: return placeholder if API key is missing
   if (!GEMINI_API_KEY) {
     console.warn("⚠️ GEMINI_API_KEY not configured, returning placeholder");
@@ -167,7 +167,7 @@ export async function runGemini(prompt: string): Promise<string> {
   }
 
   const model = String(
-    process.env.GEMINI_MODEL || "gemini-3-flash-preview"
+    modelOverride || process.env.GEMINI_MODEL || "gemini-3-flash-preview"
   ).trim();
   const url = `${GEMINI_API_BASE}/models/${model}:generateContent`;
 

@@ -70,13 +70,18 @@ router.get("/health", async (req, res) => {
  */
 router.post("/ask", async (req, res) => {
   try {
-    const { prompt } = req.body;
+    const { prompt, tier, model } = req.body;
 
     if (!prompt || typeof prompt !== "string") {
       return res.status(400).json({ error: "Prompt required" });
     }
 
-    const answer = await runGemini(prompt);
+    const modelFromTier =
+      tier === "cheap"
+        ? String(process.env.GEMINI_MODEL_CHEAP || "gemini-1.5-flash").trim()
+        : undefined;
+
+    const answer = await runGemini(prompt, typeof model === "string" ? model : modelFromTier);
     return res.json({ answer });
   } catch (err) {
     console.error(err);
