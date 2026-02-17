@@ -22,6 +22,7 @@ import personaRoutes from "./routes/persona.routes.js";
 import storeRoutes from "./routes/store.routes.js";
 import reportsRoutes from "./routes/reports.routes.js";
 import situationRoutes from "./routes/situation.routes.js";
+import tokenRoutes from "./routes/token.routes.js";
 
 import { mintRoute } from "./minting/mintRoute.js";
 import { testMintRoute } from "./minting/testMintRoute.js";
@@ -151,6 +152,7 @@ app.use("/api/persona", personaRoutes);
 app.use("/api/store", storeRoutes);
 app.use("/api/reports", reportsRoutes);
 app.use("/api/situation", situationRoutes);
+app.use("/api/token", tokenRoutes);
 
 // Legacy/compat mint endpoints
 app.post("/api/mint", (req: Request, res: Response) => void mintRoute(req, res));
