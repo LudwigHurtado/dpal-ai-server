@@ -17,6 +17,70 @@ function parseDataUrl(dataUrl: string) {
   return { mimeType: match[1], base64: match[2] };
 }
 
+function cloudinaryConfigured(): boolean {
+  return Boolean(
+    process.env.CLOUDINARY_CLOUD_NAME &&
+      process.env.CLOUDINARY_API_KEY &&
+      process.env.CLOUDINARY_API_SECRET
+  );
+}
+
+async function uploadToCloudinary(params: {
+  buffer: Buffer;
+  mimeType: string;
+  roomId: string;
+  type: "image" | "audio";
+}) {
+  const cloudName = String(process.env.CLOUDINARY_CLOUD_NAME || "").trim();
+  const apiKey = String(process.env.CLOUDINARY_API_KEY || "").trim();
+  const apiSecret = String(process.env.CLOUDINARY_API_SECRET || "").trim();
+
+  if (!cloudName || !apiKey || !apiSecret) {
+    throw new Error("cloudinary_not_configured");
+  }
+
+  const timestamp = Math.floor(Date.now() / 1000);
+  const safeRoom = params.roomId.replace(/[^a-zA-Z0-9-_]/g, "_").slice(0, 80);
+  const folder = `dpal/situation/${safeRoom}/${params.type}`;
+  const publicId = `${Date.now()}-${crypto.randomBytes(5).toString("hex")}`;
+
+  const signatureBase = `folder=${folder}&public_id=${publicId}&timestamp=${timestamp}${apiSecret}`;
+  const signature = crypto.createHash("sha1").update(signatureBase).digest("hex");
+
+  const dataUri = `data:${params.mimeType};base64,${params.buffer.toString("base64")}`;
+
+  const form = new FormData();
+  form.set("file", dataUri);
+  form.set("api_key", apiKey);
+  form.set("timestamp", String(timestamp));
+  form.set("folder", folder);
+  form.set("public_id", publicId);
+  form.set("signature", signature);
+
+  const resourceType = params.type === "audio" ? "video" : "image";
+  const endpoint = `https://api.cloudinary.com/v1_1/${encodeURIComponent(cloudName)}/${resourceType}/upload`;
+
+  const response = await fetch(endpoint, {
+    method: "POST",
+    body: form,
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`cloudinary_upload_failed:${response.status}:${body.slice(0, 300)}`);
+  }
+
+  const json: any = await response.json();
+  const secureUrl = String(json?.secure_url || "");
+  if (!secureUrl) throw new Error("cloudinary_missing_url");
+
+  return {
+    url: secureUrl,
+    path: String(json?.public_id || publicId),
+    storage: "cloudinary" as const,
+  };
+}
+
 router.post("/media", async (req: Request, res: Response) => {
   try {
     const roomId = String(req.body?.roomId || "").trim();
@@ -46,17 +110,47 @@ router.post("/media", async (req: Request, res: Response) => {
     const ext = extByMime[parsed.mimeType] || (type === "image" ? "bin" : "webm");
     const fileBuffer = Buffer.from(parsed.base64, "base64");
 
-    const safeRoom = roomId.replace(/[^a-zA-Z0-9-_]/g, "_").slice(0, 80);
-    const fileName = `${Date.now()}-${crypto.randomBytes(6).toString("hex")}.${ext}`;
-    const relativeDir = path.join("uploads", "situation", safeRoom, type);
-    const absoluteDir = path.join(process.cwd(), relativeDir);
-    ensureDir(absoluteDir);
+    // hard guard against very large inline uploads
+    const maxBytes = Number(process.env.SITUATION_MEDIA_MAX_BYTES || 12 * 1024 * 1024);
+    if (fileBuffer.length > maxBytes) {
+      return res.status(413).json({ ok: false, error: "media_too_large", maxBytes });
+    }
 
-    const absolutePath = path.join(absoluteDir, fileName);
-    fs.writeFileSync(absolutePath, fileBuffer);
+    let storedUrl = "";
+    let storedPath = "";
+    let storage: "cloudinary" | "local" = "local";
 
-    const relativeUrlPath = `/${relativeDir.replace(/\\/g, "/")}/${fileName}`;
-    const publicUrl = `${req.protocol}://${req.get("host")}${relativeUrlPath}`;
+    if (cloudinaryConfigured()) {
+      try {
+        const uploaded = await uploadToCloudinary({
+          buffer: fileBuffer,
+          mimeType: parsed.mimeType,
+          roomId,
+          type: type as "image" | "audio",
+        });
+        storedUrl = uploaded.url;
+        storedPath = uploaded.path;
+        storage = uploaded.storage;
+      } catch (cloudError: any) {
+        console.warn("Cloudinary upload failed, falling back to local storage:", cloudError?.message || cloudError);
+      }
+    }
+
+    if (!storedUrl) {
+      const safeRoom = roomId.replace(/[^a-zA-Z0-9-_]/g, "_").slice(0, 80);
+      const fileName = `${Date.now()}-${crypto.randomBytes(6).toString("hex")}.${ext}`;
+      const relativeDir = path.join("uploads", "situation", safeRoom, type);
+      const absoluteDir = path.join(process.cwd(), relativeDir);
+      ensureDir(absoluteDir);
+
+      const absolutePath = path.join(absoluteDir, fileName);
+      fs.writeFileSync(absolutePath, fileBuffer);
+
+      const relativeUrlPath = `/${relativeDir.replace(/\\/g, "/")}/${fileName}`;
+      storedUrl = `${req.protocol}://${req.get("host")}${relativeUrlPath}`;
+      storedPath = relativeUrlPath;
+      storage = "local";
+    }
 
     return res.status(201).json({
       ok: true,
@@ -64,8 +158,10 @@ router.post("/media", async (req: Request, res: Response) => {
       type,
       mimeType: parsed.mimeType,
       sizeBytes: fileBuffer.length,
-      url: publicUrl,
-      path: relativeUrlPath,
+      url: storedUrl,
+      path: storedPath,
+      storage,
+      persistent: storage === "cloudinary",
     });
   } catch (error: any) {
     console.error("Situation media upload failed:", error);
