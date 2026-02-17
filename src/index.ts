@@ -23,6 +23,11 @@ import storeRoutes from "./routes/store.routes.js";
 import reportsRoutes from "./routes/reports.routes.js";
 import situationRoutes from "./routes/situation.routes.js";
 import tokenRoutes from "./routes/token.routes.js";
+import opsRoutes from "./routes/ops.routes.js";
+import verifierRoutes from "./routes/verifier.routes.js";
+import transparencyRoutes from "./routes/transparency.routes.js";
+import missionRoutes from "./routes/mission.routes.js";
+import { featureFlags } from "./config/featureFlags.js";
 
 import { mintRoute } from "./minting/mintRoute.js";
 import { testMintRoute } from "./minting/testMintRoute.js";
@@ -85,6 +90,7 @@ app.get(
         state: dbState,
         ready: dbConnected,
       },
+      features: featureFlags,
     });
   }
 );
@@ -153,6 +159,10 @@ app.use("/api/store", storeRoutes);
 app.use("/api/reports", reportsRoutes);
 app.use("/api/situation", situationRoutes);
 app.use("/api/token", tokenRoutes);
+app.use("/api/ops", opsRoutes);
+app.use("/api/verifier", verifierRoutes);
+app.use("/api/public/transparency", transparencyRoutes);
+app.use("/api/mission", missionRoutes);
 
 // Legacy/compat mint endpoints
 app.post("/api/mint", (req: Request, res: Response) => void mintRoute(req, res));

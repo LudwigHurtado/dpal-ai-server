@@ -86,6 +86,38 @@ router.post("/:reportId/lifecycle/certify", async (req: Request, res: Response) 
   }
 });
 
+router.post("/:reportId/lifecycle/finalize", async (req: Request, res: Response) => {
+  try {
+    await connectDb();
+    const reportId = String(req.params.reportId || "").trim();
+    const doc = await ReportAnchor.findOne({ reportId });
+    if (!doc) return res.status(404).json({ ok: false, error: "report_not_found" });
+
+    const current = (doc.lifecycleState || "draft") as ReportLifecycleState;
+    if (current === "certified") {
+      return res.json({ ok: true, reportId, lifecycleState: current, idempotent: true });
+    }
+
+    if (current !== "anchored") {
+      return res.status(409).json({
+        ok: false,
+        error: "invalid_transition",
+        message: `Hard Sync finalize requires anchored state. Current state: ${current}`,
+      });
+    }
+
+    const certificateId = String(req.body?.certificateId || `cert_${Date.now()}`);
+    doc.lifecycleState = "certified";
+    doc.certifiedAt = new Date();
+    doc.certificateId = certificateId;
+    await doc.save();
+
+    return res.json({ ok: true, reportId, lifecycleState: doc.lifecycleState, certifiedAt: doc.certifiedAt, certificateId });
+  } catch (error: any) {
+    return res.status(500).json({ ok: false, error: "hard_sync_finalize_failed", message: String(error?.message || error) });
+  }
+});
+
 router.post("/anchor", async (req: Request, res: Response) => {
   try {
     await connectDb();
@@ -359,10 +391,28 @@ router.get("/:reportId/evidence/packet", async (req: Request, res: Response) => 
       })),
     };
 
+    const timeline = records.map((r) => ({
+      at: r.createdAt,
+      event: "evidence_recorded",
+      evidenceRefId: r.evidenceRefId,
+      chainRefId: r.chainRefId,
+    }));
+
+    const signedPacketMetadata = {
+      signer: process.env.DPAL_PACKET_SIGNER || "DPAL_SERVER_SIGNER_V2",
+      algorithm: "SHA256",
+      signedAt: new Date().toISOString(),
+      utilityOnly: true,
+    };
+
+    const packetHash = hashHex(stableStringify({ ...packetBody, timeline, signedPacketMetadata }));
+
     return res.json({
       ok: true,
       ...packetBody,
-      packetHash: hashHex(stableStringify(packetBody)),
+      timeline,
+      signedPacketMetadata,
+      packetHash,
       verificationBaseUrl,
       records: packetBody.records.map((r) => ({
         ...r,
@@ -372,6 +422,23 @@ router.get("/:reportId/evidence/packet", async (req: Request, res: Response) => 
   } catch (error: any) {
     console.error("Evidence packet error:", error);
     return res.status(500).json({ ok: false, error: "evidence_packet_failed", message: String(error?.message || error) });
+  }
+});
+
+router.post("/abuse/check", async (req: Request, res: Response) => {
+  try {
+    const { fingerprint = "", velocityCount = 0, windowMinutes = 10 } = req.body || {};
+    const duplicateLikely = String(fingerprint).trim().length > 0 && Number(velocityCount) > 1;
+    const brigadingRisk = Number(velocityCount) >= Math.max(8, windowMinutes);
+
+    return res.json({
+      ok: true,
+      duplicateLikely,
+      brigadingRisk,
+      recommendation: brigadingRisk ? "hold_for_review" : duplicateLikely ? "request_additional_evidence" : "allow",
+    });
+  } catch (error: any) {
+    return res.status(500).json({ ok: false, error: "abuse_check_failed", message: String(error?.message || error) });
   }
 });
 
