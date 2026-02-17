@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { connectDb } from "../config/db.js";
 import { ReportAnchor } from "../models/ReportAnchor.js";
 import { EvidenceArtifact } from "../models/EvidenceArtifact.js";
+import { assertTransition, type ReportLifecycleState } from "../domain/reportLifecycle.js";
 
 const router = Router();
 
@@ -18,6 +19,72 @@ function stableStringify(value: any): string {
 function hashHex(value: string): string {
   return `0x${crypto.createHash("sha256").update(value).digest("hex")}`;
 }
+
+async function transitionReportState(reportId: string, next: ReportLifecycleState, patch: Record<string, any> = {}) {
+  const doc = await ReportAnchor.findOne({ reportId });
+  if (!doc) throw new Error("report_not_found");
+  const current = (doc.lifecycleState || "draft") as ReportLifecycleState;
+  assertTransition(current, next);
+  doc.lifecycleState = next;
+  Object.assign(doc, patch);
+  await doc.save();
+  return doc;
+}
+
+router.get("/:reportId/lifecycle", async (req: Request, res: Response) => {
+  try {
+    await connectDb();
+    const reportId = String(req.params.reportId || "").trim();
+    const doc = await ReportAnchor.findOne({ reportId }).lean();
+    if (!doc) return res.status(404).json({ ok: false, error: "report_not_found" });
+    return res.json({
+      ok: true,
+      reportId: doc.reportId,
+      lifecycleState: doc.lifecycleState || "draft",
+      submittedAt: doc.submittedAt,
+      verifiedAt: doc.verifiedAt,
+      anchoredAt: doc.anchoredAt,
+      certifiedAt: doc.certifiedAt,
+      certificateId: doc.certificateId,
+    });
+  } catch (error: any) {
+    return res.status(500).json({ ok: false, error: "lifecycle_read_failed", message: String(error?.message || error) });
+  }
+});
+
+router.post("/:reportId/lifecycle/submit", async (req: Request, res: Response) => {
+  try {
+    await connectDb();
+    const reportId = String(req.params.reportId || "").trim();
+    const doc = await transitionReportState(reportId, "submitted", { submittedAt: new Date() });
+    return res.json({ ok: true, reportId: doc.reportId, lifecycleState: doc.lifecycleState, submittedAt: doc.submittedAt });
+  } catch (error: any) {
+    return res.status(409).json({ ok: false, error: "invalid_transition", message: String(error?.message || error) });
+  }
+});
+
+router.post("/:reportId/lifecycle/verify", async (req: Request, res: Response) => {
+  try {
+    await connectDb();
+    const reportId = String(req.params.reportId || "").trim();
+    const doc = await transitionReportState(reportId, "verified", { verifiedAt: new Date() });
+    return res.json({ ok: true, reportId: doc.reportId, lifecycleState: doc.lifecycleState, verifiedAt: doc.verifiedAt });
+  } catch (error: any) {
+    return res.status(409).json({ ok: false, error: "invalid_transition", message: String(error?.message || error) });
+  }
+});
+
+router.post("/:reportId/lifecycle/certify", async (req: Request, res: Response) => {
+  try {
+    await connectDb();
+    const reportId = String(req.params.reportId || "").trim();
+    const certificateId = String(req.body?.certificateId || `cert_${Date.now()}`);
+    const doc = await transitionReportState(reportId, "certified", { certifiedAt: new Date(), certificateId });
+    return res.json({ ok: true, reportId: doc.reportId, lifecycleState: doc.lifecycleState, certifiedAt: doc.certifiedAt, certificateId: doc.certificateId });
+  } catch (error: any) {
+    return res.status(409).json({ ok: false, error: "invalid_transition", message: String(error?.message || error) });
+  }
+});
 
 router.post("/anchor", async (req: Request, res: Response) => {
   try {
@@ -59,18 +126,30 @@ router.post("/anchor", async (req: Request, res: Response) => {
     const canonical = stableStringify(payload);
     const reportHash = `0x${crypto.createHash("sha256").update(canonical).digest("hex")}`;
 
-    const existing = await ReportAnchor.findOne({ reportId: payload.reportId }).lean();
+    const existing = await ReportAnchor.findOne({ reportId: payload.reportId });
     if (existing) {
-      return res.status(200).json({
-        ok: true,
-        duplicate: true,
-        reportId: existing.reportId,
-        reportHash: existing.reportHash,
-        txHash: existing.txHash,
-        blockNumber: existing.blockNumber,
-        chain: existing.chain,
-        anchoredAt: existing.anchoredAt,
-      });
+      const current = (existing.lifecycleState || "draft") as ReportLifecycleState;
+      if (current === "anchored" || current === "certified") {
+        return res.status(200).json({
+          ok: true,
+          duplicate: true,
+          reportId: existing.reportId,
+          reportHash: existing.reportHash,
+          txHash: existing.txHash,
+          blockNumber: existing.blockNumber,
+          chain: existing.chain,
+          anchoredAt: existing.anchoredAt,
+          lifecycleState: existing.lifecycleState,
+          certificateId: existing.certificateId,
+        });
+      }
+      if (current !== "verified") {
+        return res.status(409).json({
+          ok: false,
+          error: "invalid_transition",
+          message: `Report must be in verified state before anchoring. Current state: ${current}`,
+        });
+      }
     }
 
     const latest = await ReportAnchor.findOne().sort({ blockNumber: -1 }).lean();
@@ -80,15 +159,28 @@ router.post("/anchor", async (req: Request, res: Response) => {
     const txHash = `0x${crypto.randomBytes(32).toString("hex")}`;
     const chain = process.env.DPAL_CHAIN_NAME || "DPAL_INTERNAL";
 
-    const created = await ReportAnchor.create({
-      reportId: payload.reportId,
-      reportHash,
-      txHash,
-      blockNumber,
-      chain,
-      anchoredAt: new Date(),
-      payload,
-    });
+    const now = new Date();
+    const created = existing
+      ? await transitionReportState(payload.reportId, "anchored", {
+          reportHash,
+          txHash,
+          blockNumber,
+          chain,
+          anchoredAt: now,
+          payload,
+        })
+      : await ReportAnchor.create({
+          reportId: payload.reportId,
+          reportHash,
+          txHash,
+          blockNumber,
+          chain,
+          anchoredAt: now,
+          payload,
+          lifecycleState: "anchored",
+          submittedAt: now,
+          verifiedAt: now,
+        });
 
     return res.status(201).json({
       ok: true,
@@ -98,6 +190,8 @@ router.post("/anchor", async (req: Request, res: Response) => {
       blockNumber: created.blockNumber,
       chain: created.chain,
       anchoredAt: created.anchoredAt,
+      lifecycleState: created.lifecycleState,
+      legacyBootstrapApplied: !existing,
     });
   } catch (error: any) {
     console.error("Report anchor error:", error);
