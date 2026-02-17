@@ -1,9 +1,77 @@
 import { Router, type Request, type Response } from "express";
 import crypto from "crypto";
+import fs from "fs";
+import path from "path";
 import { connectDb } from "../config/db.js";
 import { SituationMessage } from "../models/SituationMessage.js";
 
 const router = Router();
+
+function ensureDir(dirPath: string) {
+  if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, { recursive: true });
+}
+
+function parseDataUrl(dataUrl: string) {
+  const match = /^data:([\w/+.-]+);base64,(.+)$/.exec(dataUrl || "");
+  if (!match) return null;
+  return { mimeType: match[1], base64: match[2] };
+}
+
+router.post("/media", async (req: Request, res: Response) => {
+  try {
+    const roomId = String(req.body?.roomId || "").trim();
+    const type = String(req.body?.type || "").trim();
+    const dataUrl = String(req.body?.dataUrl || "").trim();
+
+    if (!roomId || !dataUrl || !["image", "audio"].includes(type)) {
+      return res.status(400).json({ ok: false, error: "invalid_media_payload" });
+    }
+
+    const parsed = parseDataUrl(dataUrl);
+    if (!parsed) {
+      return res.status(400).json({ ok: false, error: "invalid_data_url" });
+    }
+
+    const extByMime: Record<string, string> = {
+      "image/jpeg": "jpg",
+      "image/png": "png",
+      "image/webp": "webp",
+      "image/gif": "gif",
+      "audio/webm": "webm",
+      "audio/mpeg": "mp3",
+      "audio/wav": "wav",
+      "audio/ogg": "ogg",
+    };
+
+    const ext = extByMime[parsed.mimeType] || (type === "image" ? "bin" : "webm");
+    const fileBuffer = Buffer.from(parsed.base64, "base64");
+
+    const safeRoom = roomId.replace(/[^a-zA-Z0-9-_]/g, "_").slice(0, 80);
+    const fileName = `${Date.now()}-${crypto.randomBytes(6).toString("hex")}.${ext}`;
+    const relativeDir = path.join("uploads", "situation", safeRoom, type);
+    const absoluteDir = path.join(process.cwd(), relativeDir);
+    ensureDir(absoluteDir);
+
+    const absolutePath = path.join(absoluteDir, fileName);
+    fs.writeFileSync(absolutePath, fileBuffer);
+
+    const relativeUrlPath = `/${relativeDir.replace(/\\/g, "/")}/${fileName}`;
+    const publicUrl = `${req.protocol}://${req.get("host")}${relativeUrlPath}`;
+
+    return res.status(201).json({
+      ok: true,
+      roomId,
+      type,
+      mimeType: parsed.mimeType,
+      sizeBytes: fileBuffer.length,
+      url: publicUrl,
+      path: relativeUrlPath,
+    });
+  } catch (error: any) {
+    console.error("Situation media upload failed:", error);
+    return res.status(500).json({ ok: false, error: "media_upload_failed", message: String(error?.message || error) });
+  }
+});
 
 router.get("/:roomId/messages", async (req: Request, res: Response) => {
   try {

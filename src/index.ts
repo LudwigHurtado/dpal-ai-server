@@ -12,6 +12,7 @@ dotenv.config();
 
 import express, { type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
+import path from "path";
 import { connectDb } from "./config/db.js";
 
 import aiRoutes from "./routes/ai.routes.js";
@@ -130,12 +131,15 @@ app.options("*", cors(corsOptions));
  */
 app.use(
   express.json({
-    limit: "256kb",
+    limit: "12mb",
     verify: (req: any, _res, buf) => {
       req.rawBody = buf; // Buffer
     },
   })
 );
+
+// Static media storage for situation-room uploads
+app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
 /**
  * Routes
