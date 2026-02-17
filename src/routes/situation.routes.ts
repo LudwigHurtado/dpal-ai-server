@@ -4,8 +4,26 @@ import fs from "fs";
 import path from "path";
 import { connectDb } from "../config/db.js";
 import { SituationMessage } from "../models/SituationMessage.js";
+import { SituationRoom } from "../models/SituationRoom.js";
 
 const router = Router();
+
+async function ensureRoomExists(roomId: string, title?: string, city?: string, createdBy?: string) {
+  const safeRoom = roomId.trim();
+  if (!safeRoom) return null;
+  let room = await SituationRoom.findOne({ roomId: safeRoom });
+  if (!room) {
+    room = await SituationRoom.create({
+      roomId: safeRoom,
+      title: title || `Situation Room ${safeRoom.slice(0, 8).toUpperCase()}`,
+      city: city || "",
+      createdBy: createdBy || "",
+      memberCount: 0,
+      lastActivityAt: Date.now(),
+    });
+  }
+  return room;
+}
 
 function ensureDir(dirPath: string) {
   if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, { recursive: true });
@@ -81,6 +99,33 @@ async function uploadToCloudinary(params: {
   };
 }
 
+router.get("/rooms", async (_req: Request, res: Response) => {
+  try {
+    await connectDb();
+    const rooms = await SituationRoom.find().sort({ lastActivityAt: -1 }).limit(200).lean();
+    return res.json({ ok: true, rooms });
+  } catch (error: any) {
+    console.error("Situation rooms list failed:", error);
+    return res.status(500).json({ ok: false, error: "rooms_list_failed", message: String(error?.message || error) });
+  }
+});
+
+router.post("/rooms", async (req: Request, res: Response) => {
+  try {
+    await connectDb();
+    const roomId = String(req.body?.roomId || `room-${Date.now().toString(36)}`).trim();
+    const title = String(req.body?.title || `Situation Room ${roomId.slice(0, 8).toUpperCase()}`).trim();
+    const city = String(req.body?.city || "").trim();
+    const createdBy = String(req.body?.createdBy || "").trim();
+
+    const room = await ensureRoomExists(roomId, title, city, createdBy);
+    return res.status(201).json({ ok: true, room });
+  } catch (error: any) {
+    console.error("Situation room create failed:", error);
+    return res.status(500).json({ ok: false, error: "room_create_failed", message: String(error?.message || error) });
+  }
+});
+
 router.post("/media", async (req: Request, res: Response) => {
   try {
     const roomId = String(req.body?.roomId || "").trim();
@@ -90,6 +135,9 @@ router.post("/media", async (req: Request, res: Response) => {
     if (!roomId || !dataUrl || !["image", "audio"].includes(type)) {
       return res.status(400).json({ ok: false, error: "invalid_media_payload" });
     }
+
+    await connectDb();
+    await ensureRoomExists(roomId);
 
     const parsed = parseDataUrl(dataUrl);
     if (!parsed) {
@@ -152,6 +200,8 @@ router.post("/media", async (req: Request, res: Response) => {
       storage = "local";
     }
 
+    await SituationRoom.updateOne({ roomId }, { $set: { lastActivityAt: Date.now() } });
+
     return res.status(201).json({
       ok: true,
       roomId,
@@ -179,6 +229,8 @@ router.get("/:roomId/messages", async (req: Request, res: Response) => {
       return res.status(400).json({ ok: false, error: "roomId_required" });
     }
 
+    await ensureRoomExists(roomId);
+
     const docs = await SituationMessage.find({ roomId })
       .sort({ timestamp: 1 })
       .limit(limit)
@@ -201,6 +253,8 @@ router.post("/:roomId/messages", async (req: Request, res: Response) => {
       return res.status(400).json({ ok: false, error: "roomId_required" });
     }
 
+    await ensureRoomExists(roomId, undefined, undefined, String(sender || "OPERATIVE"));
+
     const hasPayload = Boolean((text && String(text).trim()) || imageUrl || audioUrl);
     if (!hasPayload) {
       return res.status(400).json({ ok: false, error: "message_payload_required" });
@@ -222,6 +276,8 @@ router.post("/:roomId/messages", async (req: Request, res: Response) => {
       ledgerProof,
       timestamp: now,
     });
+
+    await SituationRoom.updateOne({ roomId }, { $set: { lastActivityAt: now } });
 
     return res.status(201).json({ ok: true, message: created });
   } catch (error: any) {
