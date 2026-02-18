@@ -7,6 +7,16 @@ import { assertTransition, type ReportLifecycleState } from "../domain/reportLif
 
 const router = Router();
 
+type OpsStatus = "New" | "Investigating" | "Action Taken" | "Resolved";
+
+function normalizeOpsStatus(value: any): OpsStatus {
+  const input = String(value || "").trim().toLowerCase();
+  if (input === "investigating") return "Investigating";
+  if (input === "action taken" || input === "action_taken" || input === "action-taken") return "Action Taken";
+  if (input === "resolved") return "Resolved";
+  return "New";
+}
+
 function stableStringify(value: any): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
@@ -30,6 +40,82 @@ async function transitionReportState(reportId: string, next: ReportLifecycleStat
   await doc.save();
   return doc;
 }
+
+router.get("/feed", async (req: Request, res: Response) => {
+  try {
+    await connectDb();
+    const limit = Math.min(200, Math.max(1, Number(req.query.limit || 50)));
+    const entityType = String(req.query.entityType || "").trim().toLowerCase();
+    const entityName = String(req.query.entityName || "").trim().toLowerCase();
+
+    const docs = await ReportAnchor.find({}).sort({ updatedAt: -1 }).limit(limit).lean();
+
+    const items = docs
+      .filter((doc: any) => {
+        const p = doc.payload || {};
+        const pEntityType = String(p.entityType || "").toLowerCase();
+        const pEntityName = String(p.entityName || "").toLowerCase();
+        if (entityType && !pEntityType.includes(entityType)) return false;
+        if (entityName && !pEntityName.includes(entityName)) return false;
+        return true;
+      })
+      .map((doc: any) => {
+        const p = doc.payload || {};
+        return {
+          reportId: doc.reportId,
+          title: String(p.title || "Untitled report"),
+          category: String(p.category || "General"),
+          description: String(p.description || ""),
+          location: String(p.location || "Unknown"),
+          severity: String(p.severity || "Moderate"),
+          channel: String(p.channel || "Web Portal"),
+          entityType: String(p.entityType || ""),
+          entityName: String(p.entityName || ""),
+          lifecycleState: doc.lifecycleState || "draft",
+          opsStatus: normalizeOpsStatus(p.opsStatus),
+          updatedAt: doc.updatedAt,
+          anchoredAt: doc.anchoredAt,
+        };
+      });
+
+    return res.json({ ok: true, count: items.length, items });
+  } catch (error: any) {
+    return res.status(500).json({ ok: false, error: "feed_read_failed", message: String(error?.message || error) });
+  }
+});
+
+router.patch("/:reportId/ops-status", async (req: Request, res: Response) => {
+  try {
+    await connectDb();
+    const reportId = String(req.params.reportId || "").trim();
+    if (!reportId) return res.status(400).json({ ok: false, error: "missing_report_id" });
+
+    const doc = await ReportAnchor.findOne({ reportId });
+    if (!doc) return res.status(404).json({ ok: false, error: "report_not_found" });
+
+    const next = normalizeOpsStatus(req.body?.status);
+    const note = String(req.body?.note || "").slice(0, 800);
+    const payload = doc.payload || {};
+    const history = Array.isArray(payload.opsHistory) ? payload.opsHistory : [];
+
+    payload.opsStatus = next;
+    payload.opsHistory = [
+      {
+        status: next,
+        note,
+        at: new Date().toISOString(),
+      },
+      ...history,
+    ].slice(0, 50);
+
+    doc.payload = payload;
+    await doc.save();
+
+    return res.json({ ok: true, reportId: doc.reportId, opsStatus: next, updatedAt: doc.updatedAt });
+  } catch (error: any) {
+    return res.status(500).json({ ok: false, error: "ops_status_update_failed", message: String(error?.message || error) });
+  }
+});
 
 router.get("/:reportId/lifecycle", async (req: Request, res: Response) => {
   try {
@@ -132,6 +218,10 @@ router.post("/anchor", async (req: Request, res: Response) => {
       severity,
       isActionable,
       structuredData,
+      channel,
+      entityType,
+      entityName,
+      opsStatus,
     } = req.body || {};
 
     if (!reportId || !title || !description || !category) {
@@ -152,6 +242,10 @@ router.post("/anchor", async (req: Request, res: Response) => {
       severity: String(severity || "Standard"),
       isActionable: Boolean(isActionable),
       structuredData: structuredData || {},
+      channel: String(channel || "Web Portal"),
+      entityType: String(entityType || ""),
+      entityName: String(entityName || ""),
+      opsStatus: normalizeOpsStatus(opsStatus),
       anchoredAt: new Date().toISOString(),
     };
 
