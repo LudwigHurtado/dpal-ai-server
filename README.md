@@ -2,6 +2,8 @@
 
 Backend server for the DPAL (Decentralized Public Accountability Ledger) application.
 
+**HQ / Enterprise:** Exposes `/api/admin` (metrics, activity, QC, alerts, system health) and `/api/reports/feed` for the DPAL Enterprise Dashboard.
+
 ## Setup
 
 1. Install dependencies:
