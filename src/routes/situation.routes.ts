@@ -35,6 +35,34 @@ function parseDataUrl(dataUrl: string) {
   return { mimeType: match[1], base64: match[2] };
 }
 
+/** Max inline data URL per field — must stay under express.json body limit (12mb). */
+const MAX_INLINE_MEDIA_CHARS = 9 * 1024 * 1024;
+
+/**
+ * Accept https URLs (uploaded files / Cloudinary) or data: URLs stored in Mongo for cross-device chat.
+ */
+function normalizeSituationMediaUrl(value: unknown, kind: "image" | "audio"): string | undefined {
+  if (value == null || value === "") return undefined;
+  const s = String(value).trim();
+  if (!s) return undefined;
+  if (s.startsWith("data:")) {
+    if (s.length > MAX_INLINE_MEDIA_CHARS) {
+      throw new Error(`${kind}_inline_too_large`);
+    }
+    if (kind === "image") {
+      if (!/^data:image\//.test(s)) throw new Error("invalid_inline_image");
+    } else if (!/^data:audio\//.test(s)) {
+      throw new Error("invalid_inline_audio");
+    }
+    return s;
+  }
+  if (/^https?:\/\//i.test(s)) {
+    if (s.length > 4096) throw new Error("media_url_too_long");
+    return s;
+  }
+  throw new Error("invalid_media_url");
+}
+
 function cloudinaryConfigured(): boolean {
   return Boolean(
     process.env.CLOUDINARY_CLOUD_NAME &&
@@ -272,6 +300,19 @@ router.post("/:roomId/messages", async (req: Request, res: Response) => {
     const safeSender = String(sender || "OPERATIVE").slice(0, 80);
     const safeText = String(text || "").slice(0, 5000);
 
+    let safeImageUrl: string | undefined;
+    let safeAudioUrl: string | undefined;
+    try {
+      safeImageUrl = normalizeSituationMediaUrl(imageUrl, "image");
+      safeAudioUrl = normalizeSituationMediaUrl(audioUrl, "audio");
+    } catch (e: any) {
+      return res.status(400).json({
+        ok: false,
+        error: "invalid_media",
+        message: String(e?.message || e),
+      });
+    }
+
     const now = Date.now();
     const ledgerProof = `0x${crypto.createHash("sha256").update(`${roomId}|${safeSender}|${safeText}|${now}`).digest("hex")}`;
 
@@ -279,8 +320,8 @@ router.post("/:roomId/messages", async (req: Request, res: Response) => {
       roomId,
       sender: safeSender,
       text: safeText,
-      imageUrl: imageUrl ? String(imageUrl) : undefined,
-      audioUrl: audioUrl ? String(audioUrl) : undefined,
+      imageUrl: safeImageUrl,
+      audioUrl: safeAudioUrl,
       isSystem: Boolean(isSystem),
       ledgerProof,
       timestamp: now,
