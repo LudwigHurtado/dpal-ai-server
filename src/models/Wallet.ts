@@ -6,7 +6,6 @@ const WalletSchema = new Schema(
       type: String,
       required: true,
       unique: true,
-      index: true
     },
     balance: {
       type: Number,
@@ -23,8 +22,6 @@ const WalletSchema = new Schema(
   },
   { timestamps: true }
 );
-
-WalletSchema.index({ heroId: 1 });
 
 // Prevent model overwrite in dev / nodemon reloads
 export const Wallet =

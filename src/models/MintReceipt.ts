@@ -15,7 +15,7 @@ export interface IMintReceipt extends mongoose.Document {
 const MintReceiptSchema = new Schema<IMintReceipt>(
   {
     mintRequestId: { type: Schema.Types.ObjectId, ref: "MintRequest", required: true, index: true },
-    userId: { type: String, required: true, index: true },
+    userId: { type: String, required: true },
     tokenId: { type: String, required: true, unique: true, index: true },
     txHash: { type: String, required: true, index: true },
     chain: { type: String, required: true },

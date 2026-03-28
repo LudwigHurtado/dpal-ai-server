@@ -10,15 +10,13 @@ export interface ICreditWallet extends mongoose.Document {
 
 const CreditWalletSchema = new Schema<ICreditWallet>(
   {
-    userId: { type: String, required: true, unique: true, index: true },
+    userId: { type: String, required: true, unique: true },
     balance: { type: Number, default: 0, min: 0 },
     lockedBalance: { type: Number, default: 0, min: 0 },
     updatedAt: { type: Date, default: Date.now },
   },
   { timestamps: true, versionKey: "version" }
 );
-
-CreditWalletSchema.index({ userId: 1 });
 
 // Prevent model overwrite in dev / nodemon reloads
 export const CreditWallet =

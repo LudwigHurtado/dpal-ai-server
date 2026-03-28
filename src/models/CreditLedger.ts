@@ -13,12 +13,12 @@ export interface ICreditLedger extends mongoose.Document {
 
 const CreditLedgerSchema = new Schema<ICreditLedger>(
   {
-    userId: { type: String, required: true, index: true },
+    userId: { type: String, required: true },
     type: { type: String, required: true, enum: ["CREDIT_LOCK", "CREDIT_SPEND", "CREDIT_UNLOCK", "DEPOSIT"] },
     amount: { type: Number, required: true },
     direction: { type: String, required: true, enum: ["CREDIT", "DEBIT"] },
     referenceId: { type: String, required: true },
-    idempotencyKey: { type: String, required: true, unique: true, index: true },
+    idempotencyKey: { type: String, required: true, unique: true },
     meta: Schema.Types.Mixed,
   },
   { timestamps: { createdAt: true, updatedAt: false } }

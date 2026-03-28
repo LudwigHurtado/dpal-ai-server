@@ -19,7 +19,6 @@ const HeroSchema = new Schema(
       type: String,
       required: true,
       unique: true,
-      index: true
     },
 
     // Profile

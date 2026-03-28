@@ -18,12 +18,12 @@ export interface IMintRequest extends mongoose.Document {
 
 const MintRequestSchema = new Schema<IMintRequest>(
   {
-    userId: { type: String, required: true, index: true },
+    userId: { type: String, required: true },
     assetDraftId: { type: String, required: true },
     collectionId: { type: String, required: true },
     priceCredits: { type: Number, required: true },
     chain: { type: String, required: true },
-    idempotencyKey: { type: String, required: true, unique: true, index: true },
+    idempotencyKey: { type: String, required: true, unique: true },
     nonce: { type: String, required: true },
     timestamp: { type: Number, required: true },
     signature: { type: String, required: false },

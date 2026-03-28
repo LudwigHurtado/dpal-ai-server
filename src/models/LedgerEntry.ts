@@ -2,7 +2,7 @@ import mongoose, { Schema } from "mongoose";
 
 const LedgerEntrySchema = new Schema(
   {
-    heroId: { type: String, required: true, index: true },
+    heroId: { type: String, required: true },
 
     type: { type: String, required: true },     // EARN | SPEND | TRANSFER_IN | TRANSFER_OUT | ...
     amount: { type: Number, required: true },   // positive
