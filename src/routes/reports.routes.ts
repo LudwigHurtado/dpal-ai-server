@@ -84,6 +84,99 @@ router.get("/feed", async (req: Request, res: Response) => {
   }
 });
 
+/** Ledger block index → reportId (for Main Menu block search + block deep links). */
+router.get("/lookup", async (req: Request, res: Response) => {
+  try {
+    await connectDb();
+    const raw = req.query.blockNumber ?? req.query.block;
+    const n = Number.parseInt(String(raw ?? "").replace(/^#/, "").replace(/,/g, ""), 10);
+    if (!Number.isFinite(n) || n < 0) {
+      return res.status(400).json({ ok: false, error: "invalid_block_number" });
+    }
+    const doc = await ReportAnchor.findOne({ blockNumber: n }).lean();
+    if (!doc) return res.status(404).json({ ok: false, error: "not_found" });
+    return res.json({ ok: true, reportId: doc.reportId, id: doc.reportId });
+  } catch (error: any) {
+    return res.status(500).json({ ok: false, error: "lookup_failed", message: String(error?.message || error) });
+  }
+});
+
+/**
+ * Full report upsert → MongoDB (Railway). Enables GET /api/reports/:id for any browser / ?reportId= links.
+ */
+router.post("/", async (req: Request, res: Response) => {
+  try {
+    await connectDb();
+    const body = req.body || {};
+    const reportId = String(body.id || body.reportId || "").trim();
+    if (!reportId) {
+      return res.status(400).json({ ok: false, error: "missing_report_id" });
+    }
+
+    const title = String(body.title ?? "Untitled");
+    const description = String(body.description ?? "");
+    const category = String(body.category ?? "Other");
+
+    const existing = await ReportAnchor.findOne({ reportId });
+    const reportHash =
+      String(body.hash || "").trim() ||
+      existing?.reportHash ||
+      hashHex(stableStringify({ reportId, title, description, category, location: body.location }));
+
+    let txHash = String(body.txHash || body.blockchainRef || "").trim();
+    if (!txHash) txHash = existing?.txHash || `0x${crypto.randomBytes(32).toString("hex")}`;
+
+    let blockNumber: number | undefined =
+      typeof body.blockNumber === "number" && Number.isFinite(body.blockNumber) ? body.blockNumber : existing?.blockNumber;
+    if (blockNumber == null) {
+      const latest = await ReportAnchor.findOne().sort({ blockNumber: -1 }).lean();
+      const blockStart = Number(process.env.DPAL_BLOCK_START || 6843021);
+      blockNumber = latest?.blockNumber ? latest.blockNumber + 1 : blockStart;
+    }
+
+    const chain = String(body.chain || existing?.chain || process.env.DPAL_CHAIN_NAME || "DPAL_INTERNAL");
+    const anchoredAt = body.anchoredAt ? new Date(body.anchoredAt) : existing?.anchoredAt || new Date();
+
+    const payload = {
+      ...(typeof body === "object" ? body : {}),
+      title,
+      description,
+      category,
+      location: String(body.location ?? ""),
+      trustScore: typeof body.trustScore === "number" ? body.trustScore : 70,
+      severity: String(body.severity ?? "Standard"),
+      isActionable: body.isActionable !== false,
+      evidenceVault: body.evidenceVault,
+      imageUrls: body.imageUrls,
+      structuredData: body.structuredData,
+    };
+
+    await ReportAnchor.findOneAndUpdate(
+      { reportId },
+      {
+        $set: {
+          reportId,
+          reportHash,
+          txHash,
+          blockNumber,
+          chain,
+          anchoredAt,
+          payload,
+          lifecycleState: "anchored",
+          submittedAt: existing?.submittedAt || new Date(),
+          verifiedAt: existing?.verifiedAt || new Date(),
+        },
+      },
+      { upsert: true, new: true }
+    );
+
+    return res.status(existing ? 200 : 201).json({ ok: true, reportId, stored: true });
+  } catch (error: any) {
+    console.error("Report upsert error:", error);
+    return res.status(500).json({ ok: false, error: "report_upsert_failed", message: String(error?.message || error) });
+  }
+});
+
 router.patch("/:reportId/ops-status", async (req: Request, res: Response) => {
   try {
     await connectDb();
@@ -533,6 +626,49 @@ router.post("/abuse/check", async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     return res.status(500).json({ ok: false, error: "abuse_check_failed", message: String(error?.message || error) });
+  }
+});
+
+/**
+ * Public read for shared ?reportId= / QR links (must be after /feed, /lookup, /:id/... routes).
+ */
+router.get("/:reportId", async (req: Request, res: Response) => {
+  try {
+    await connectDb();
+    const reportId = String(req.params.reportId || "").trim();
+    if (!reportId) return res.status(400).json({ ok: false, error: "missing_report_id" });
+
+    const reserved = new Set(["feed", "lookup", "anchor", "abuse"]);
+    if (reserved.has(reportId)) return res.status(404).json({ ok: false, error: "not_found" });
+
+    const doc = await ReportAnchor.findOne({ reportId }).lean();
+    if (!doc) return res.status(404).json({ ok: false, error: "not_found" });
+
+    const p = (doc.payload || {}) as Record<string, any>;
+    const ts = doc.submittedAt || doc.anchoredAt || doc.createdAt || new Date();
+    return res.json({
+      id: doc.reportId,
+      title: p.title || "Untitled",
+      description: p.description || "",
+      category: p.category || "Other",
+      location: p.location || "Unknown",
+      timestamp: ts instanceof Date ? ts.toISOString() : new Date(ts).toISOString(),
+      hash: doc.reportHash,
+      blockchainRef: doc.txHash,
+      blockNumber: doc.blockNumber,
+      txHash: doc.txHash,
+      chain: doc.chain,
+      anchoredAt: doc.anchoredAt ? new Date(doc.anchoredAt).toISOString() : undefined,
+      status: "Submitted",
+      trustScore: typeof p.trustScore === "number" ? p.trustScore : 70,
+      severity: p.severity || "Standard",
+      isActionable: p.isActionable !== false,
+      evidenceVault: p.evidenceVault,
+      imageUrls: p.imageUrls,
+      structuredData: p.structuredData,
+    });
+  } catch (error: any) {
+    return res.status(500).json({ ok: false, error: "report_read_failed", message: String(error?.message || error) });
   }
 });
 
