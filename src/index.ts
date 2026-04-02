@@ -9,6 +9,8 @@ process.on("unhandledRejection", (e: any) => {
 
 import dotenv from "dotenv";
 dotenv.config();
+import { validateEnv } from "./config/env.js";
+validateEnv();
 
 import express, { type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
@@ -27,6 +29,10 @@ import opsRoutes from "./routes/ops.routes.js";
 import verifierRoutes from "./routes/verifier.routes.js";
 import transparencyRoutes from "./routes/transparency.routes.js";
 import missionRoutes from "./routes/mission.routes.js";
+import ledgerRoutes from "./routes/ledger.routes.js";
+import nexusClientRoutes from "./routes/nexus-clients.routes.js";
+import emergencyRoutes from "./routes/emergencies.routes.js";
+import costsRoutes from "./routes/costs.routes.js";
 import { featureFlags } from "./config/featureFlags.js";
 
 import { mintRoute } from "./minting/mintRoute.js";
@@ -163,6 +169,10 @@ app.use("/api/ops", opsRoutes);
 app.use("/api/verifier", verifierRoutes);
 app.use("/api/public/transparency", transparencyRoutes);
 app.use("/api/mission", missionRoutes);
+app.use("/api/ledger", ledgerRoutes);
+app.use("/api/nexus-clients", nexusClientRoutes);
+app.use("/api/emergencies", emergencyRoutes);
+app.use("/api/costs", costsRoutes);
 
 // Legacy/compat mint endpoints
 app.post("/api/mint", (req: Request, res: Response) => void mintRoute(req, res));
