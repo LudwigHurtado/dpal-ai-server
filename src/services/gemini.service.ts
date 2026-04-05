@@ -74,15 +74,79 @@ async function extractErrorMessage(response: Response): Promise<string> {
  *   archetype: "Shadow"
  * });
  */
+/** Native image models need responseModalities or the API may return text-only (no inline image). @see https://ai.google.dev/gemini-api/docs/image-generation */
+const IMAGE_RESPONSE_CONFIG = {
+  generationConfig: {
+    responseModalities: ["TEXT", "IMAGE"] as const,
+  },
+};
+
+/** Try in order: explicit GEMINI_IMAGE_MODEL, then defaults documented for Nano Banana / Gemini image APIs. */
+const DEFAULT_IMAGE_MODEL_CHAIN = [
+  "gemini-3.1-flash-image-preview",
+  "gemini-3-pro-image-preview",
+  "gemini-2.5-flash-image",
+] as const;
+
+function resolveImageModelChain(): string[] {
+  const env = String(process.env.GEMINI_IMAGE_MODEL || "").trim();
+  const ordered = env
+    ? [env, ...DEFAULT_IMAGE_MODEL_CHAIN.filter((m) => m !== env)]
+    : [...DEFAULT_IMAGE_MODEL_CHAIN];
+  return [...new Set(ordered)];
+}
+
+async function generatePersonaImagePngWithModel(
+  model: string,
+  prompt: string
+): Promise<Buffer> {
+  const url = `${GEMINI_API_BASE}/models/${model}:generateContent`;
+  const requestBody = {
+    contents: [
+      {
+        role: "user" as const,
+        parts: [{ text: prompt }],
+      },
+    ],
+    ...IMAGE_RESPONSE_CONFIG,
+  };
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-goog-api-key": GEMINI_API_KEY,
+    },
+    body: JSON.stringify(requestBody),
+  });
+
+  if (!response.ok) {
+    const errorMsg = await extractErrorMessage(response);
+    throw new Error(`Gemini image generation failed (${model}): ${errorMsg}`);
+  }
+
+  const json = (await response.json()) as GeminiResponse;
+  const candidates = json?.candidates || [];
+
+  if (candidates.length === 0) {
+    throw new Error(`Gemini returned no candidates (${model})`);
+  }
+
+  const parts = candidates[0]?.content?.parts || [];
+  const imagePart = parts.find((p) => p?.inlineData?.data);
+
+  if (!imagePart?.inlineData?.data) {
+    throw new Error(`Gemini returned no inline image data (${model})`);
+  }
+
+  const base64Data = String(imagePart.inlineData.data);
+  return Buffer.from(base64Data, "base64");
+}
+
 export async function generatePersonaImagePng(
   input: GeneratePersonaImageInput
 ): Promise<Buffer> {
   ensureApiKey();
-
-  const model = String(
-    process.env.GEMINI_IMAGE_MODEL || "gemini-3-pro-image-preview"
-  ).trim();
-  const url = `${GEMINI_API_BASE}/models/${model}:generateContent`;
 
   // Construct a high-quality, photorealistic prompt for collectible NFT art
   const categoryContext = input.category ? `Category: ${input.category}. ` : "";
@@ -96,53 +160,23 @@ export async function generatePersonaImagePng(
     "Output: Premium collectible digital artifact, 1:1 aspect ratio, PNG format.",
   ].join("\n");
 
-  const requestBody = {
-    contents: [
-      {
-        parts: [{ text: prompt }],
-      },
-    ],
-  };
+  const models = resolveImageModelChain();
+  let lastError: Error | undefined;
 
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": GEMINI_API_KEY,
-      },
-      body: JSON.stringify(requestBody),
-    });
-
-    if (!response.ok) {
-      const errorMsg = await extractErrorMessage(response);
-      throw new Error(`Gemini image generation failed: ${errorMsg}`);
+  for (const model of models) {
+    try {
+      return await generatePersonaImagePngWithModel(model, prompt);
+    } catch (e: unknown) {
+      lastError = e instanceof Error ? e : new Error(String(e));
+      console.warn(`[gemini image] model ${model} failed:`, lastError.message);
     }
-
-    const json = await response.json() as GeminiResponse;
-    const candidates = json?.candidates || [];
-    
-    if (candidates.length === 0) {
-      throw new Error("Gemini returned no candidates in response");
-    }
-
-    const parts = candidates[0]?.content?.parts || [];
-    const imagePart = parts.find((p) => p?.inlineData?.data);
-
-    if (!imagePart?.inlineData?.data) {
-      throw new Error("Gemini returned no inline image data in response");
-    }
-
-    const base64Data = String(imagePart.inlineData.data);
-    return Buffer.from(base64Data, "base64");
-  } catch (error: any) {
-    // Re-throw with context if it's already our error
-    if (error.message?.includes("Gemini") || error.message?.includes("GEMINI")) {
-      throw error;
-    }
-    // Wrap unexpected errors
-    throw new Error(`Failed to generate persona image: ${error?.message || String(error)}`);
   }
+
+  const msg = lastError?.message || "All image models failed";
+  if (msg.includes("Gemini") || msg.includes("GEMINI")) {
+    throw lastError instanceof Error ? lastError : new Error(msg);
+  }
+  throw new Error(`Failed to generate persona image: ${msg}`);
 }
 
 // ============================================================================
