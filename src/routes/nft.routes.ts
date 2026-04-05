@@ -9,6 +9,7 @@ import { CreditLedger } from "../models/CreditLedger.js";
 import { AuditEvent } from "../models/AuditEvent.js";
 import { NftAsset } from "../models/NftAsset.js";
 import { Hero } from "../models/Hero.js";
+import { SavedHeroPersona } from "../models/SavedHeroPersona.js";
 import mongoose from "mongoose";
 
 const router = Router();
@@ -69,11 +70,31 @@ router.post("/mint", async (req: Request, res: Response) => {
   // atomic operations.
 
   try {
-    const { userId, prompt, theme, category, priceCredits, idempotencyKey, nonce, timestamp, traits } = req.body;
+    const { userId, prompt, theme, category, priceCredits, idempotencyKey, nonce, timestamp, traits, savedPersonaId } =
+      req.body;
 
     // === Input Validation ===
     if (!userId || typeof userId !== "string" || userId.trim() === "") {
       return res.status(400).json({ error: "userId is required and must be a non-empty string" });
+    }
+
+    /** Link mint receipt to a persisted hero persona (off-chain record). */
+    if (savedPersonaId != null && String(savedPersonaId).trim() !== "") {
+      const sid = String(savedPersonaId).trim();
+      if (!mongoose.Types.ObjectId.isValid(sid)) {
+        return res.status(400).json({ error: "invalid_saved_persona", message: "savedPersonaId is not a valid id" });
+      }
+      const sp = await SavedHeroPersona.findById(sid);
+      if (!sp || sp.userId !== userId.trim()) {
+        return res.status(400).json({ error: "invalid_saved_persona", message: "Persona not found for this user" });
+      }
+      if (sp.isMinted) {
+        return res.status(409).json({
+          error: "already_minted",
+          message: "This saved hero identity was already minted",
+          tokenId: sp.tokenId,
+        });
+      }
     }
     if (!prompt || typeof prompt !== "string" || prompt.trim() === "") {
       return res.status(400).json({ error: "prompt is required and must be a non-empty string" });
@@ -86,12 +107,12 @@ router.post("/mint", async (req: Request, res: Response) => {
     }
 
     const finalPriceCredits = priceCredits !== undefined ? Number(priceCredits) : 0;
-    
+
     // Generate a truly unique idempotency key using crypto random to ensure
     // each mint request creates a new NFT, even if the same prompt is used.
     // This prevents duplicate NFTs from being returned.
-    const crypto = await import('crypto');
-    const uniqueNonce = crypto.randomBytes(16).toString('hex');
+    const crypto = await import("crypto");
+    const uniqueNonce = crypto.randomBytes(16).toString("hex");
     const idemKey = idempotencyKey || `mint-${userId}-${Date.now()}-${uniqueNonce}`;
 
     // === Check for duplicate mint by prompt content ===
@@ -100,9 +121,9 @@ router.post("/mint", async (req: Request, res: Response) => {
     const recentMintRequest = await MintRequest.findOne({
       userId,
       createdAt: { $gte: new Date(Date.now() - 3000) },
-      status: 'COMPLETED'
+      status: "COMPLETED",
     }).sort({ createdAt: -1 });
-    
+
     // If there's a very recent completed mint, check if it's the same prompt (likely a double-click)
     if (recentMintRequest) {
       const recentReceipt = await MintReceipt.findOne({ mintRequestId: recentMintRequest._id });
@@ -140,7 +161,7 @@ router.post("/mint", async (req: Request, res: Response) => {
       { userId, balance: { $gte: finalPriceCredits }, lockedBalance: 0 },
       {
         $inc: { balance: -finalPriceCredits, lockedBalance: finalPriceCredits },
-        $set: { updatedAt: new Date() }
+        $set: { updatedAt: new Date() },
       },
       { new: true }
     );
@@ -156,7 +177,7 @@ router.post("/mint", async (req: Request, res: Response) => {
         { userId, balance: { $gte: finalPriceCredits }, lockedBalance: 0 },
         {
           $inc: { balance: -finalPriceCredits, lockedBalance: finalPriceCredits },
-          $set: { updatedAt: new Date() }
+          $set: { updatedAt: new Date() },
         },
         { new: true }
       );
@@ -170,33 +191,37 @@ router.post("/mint", async (req: Request, res: Response) => {
     }
 
     // === Ledger Entry: DEBIT (PENDING) ===
-    const ledgerEntry = await CreditLedger.create([{
-      userId,
-      type: "CREDIT_LOCK",
-      amount: finalPriceCredits,
-      direction: "DEBIT",
-      referenceId: idemKey,
-      idempotencyKey: `lock-${idemKey}`,
-      meta: { prompt, theme, category }
-    }]);
+    await CreditLedger.create([
+      {
+        userId,
+        type: "CREDIT_LOCK",
+        amount: finalPriceCredits,
+        direction: "DEBIT",
+        referenceId: idemKey,
+        idempotencyKey: `lock-${idemKey}`,
+        meta: { prompt, theme, category },
+      },
+    ]);
 
     // === Audit Event: mint initiated ===
-    await AuditEvent.create([{
-      actorUserId: userId,
-      action: "NFT_MINT_INITIATED",
-      entityType: "MintRequest",
-      entityId: idemKey,
-      hash: `mint-${idemKey}`,
-      meta: {
-        prompt: prompt,
-        theme,
-        category,
-        priceCredits: finalPriceCredits,
-        idempotencyKey: idemKey,
-        traits
-      }
-    }]);
-    
+    await AuditEvent.create([
+      {
+        actorUserId: userId,
+        action: "NFT_MINT_INITIATED",
+        entityType: "MintRequest",
+        entityId: idemKey,
+        hash: `mint-${idemKey}`,
+        meta: {
+          prompt: prompt,
+          theme,
+          category,
+          priceCredits: finalPriceCredits,
+          idempotencyKey: idemKey,
+          traits,
+        },
+      },
+    ]);
+
     // === Generate unique keywords for this mint to ensure uniqueness ===
     // Use AI to enhance the prompt with unique, contextual keywords
     let enhancedPrompt = prompt.trim();
@@ -219,11 +244,11 @@ router.post("/mint", async (req: Request, res: Response) => {
       const pngBytes = await generatePersonaImagePng({
         description: enhancedPrompt,
         archetype: String(theme || "artifact"),
-        category: String(category || "general")
+        category: String(category || "general"),
       });
       base64 = pngBytes.toString("base64");
-      const crypto = await import('crypto');
-      const uniqueSuffix = crypto.randomBytes(8).toString('hex');
+      const crypto2 = await import("crypto");
+      const uniqueSuffix = crypto2.randomBytes(8).toString("hex");
       tokenId = `DPAL-${Date.now()}-${uniqueSuffix}`;
     } catch (err) {
       // === Rollback: unlock wallet, audit failure ===
@@ -232,14 +257,16 @@ router.post("/mint", async (req: Request, res: Response) => {
         { $inc: { balance: finalPriceCredits, lockedBalance: -finalPriceCredits } },
         {}
       );
-      await AuditEvent.create([{
-        actorUserId: userId,
-        action: "NFT_MINT_IMAGE_FAILED",
-        entityType: "MintRequest",
-        entityId: idemKey,
-        hash: `mint-failed-${idemKey}`,
-        meta: { prompt, error: String(err) }
-      }]);
+      await AuditEvent.create([
+        {
+          actorUserId: userId,
+          action: "NFT_MINT_IMAGE_FAILED",
+          entityType: "MintRequest",
+          entityId: idemKey,
+          hash: `mint-failed-${idemKey}`,
+          meta: { prompt, error: String(err) },
+        },
+      ]);
 
       return res.status(502).json({
         error: "image_generation_failed",
@@ -248,41 +275,47 @@ router.post("/mint", async (req: Request, res: Response) => {
     }
 
     // === Save NFT Asset ===
-    const nftAsset = await NftAsset.create([{
-      tokenId,
-      collectionId: 'GENESIS_01',
-      chain: 'DPAL_INTERNAL',
-      metadataUri: `dpal://metadata/${tokenId}`,
-      imageUri: `/api/assets/${tokenId}.png`,
-      attributes: traits || [],
-      createdByUserId: userId,
-      status: 'MINTED',
-      imageData: Buffer.from(base64, 'base64')
-    }]);
+    const nftAsset = await NftAsset.create([
+      {
+        tokenId,
+        collectionId: "GENESIS_01",
+        chain: "DPAL_INTERNAL",
+        metadataUri: `dpal://metadata/${tokenId}`,
+        imageUri: `/api/assets/${tokenId}.png`,
+        attributes: traits || [],
+        createdByUserId: userId,
+        status: "MINTED",
+        imageData: Buffer.from(base64, "base64"),
+      },
+    ]);
 
     // === Create MintRequest for receipt reference ===
-    const mintRequest = await MintRequest.create([{
-      userId,
-      idempotencyKey: idemKey,
-      assetDraftId: tokenId,
-      collectionId: 'GENESIS_01',
-      priceCredits: finalPriceCredits,
-      chain: 'DPAL_INTERNAL',
-      nonce: nonce || Math.random().toString(36).slice(2, 15),
-      timestamp: timestamp || Date.now(),
-      status: 'COMPLETED'
-    }]);
+    const mintRequest = await MintRequest.create([
+      {
+        userId,
+        idempotencyKey: idemKey,
+        assetDraftId: tokenId,
+        collectionId: "GENESIS_01",
+        priceCredits: finalPriceCredits,
+        chain: "DPAL_INTERNAL",
+        nonce: nonce || Math.random().toString(36).slice(2, 15),
+        timestamp: timestamp || Date.now(),
+        status: "COMPLETED",
+      },
+    ]);
 
     // === Complete ledger entry (spend) ===
-    const spendLedgerEntry = await CreditLedger.create([{
-      userId,
-      type: "CREDIT_SPEND",
-      amount: finalPriceCredits,
-      direction: "DEBIT",
-      referenceId: mintRequest[0]._id.toString(),
-      idempotencyKey: `spend-${idemKey}`,
-      meta: { prompt, theme, category }
-    }]);
+    const spendLedgerEntry = await CreditLedger.create([
+      {
+        userId,
+        type: "CREDIT_SPEND",
+        amount: finalPriceCredits,
+        direction: "DEBIT",
+        referenceId: mintRequest[0]._id.toString(),
+        idempotencyKey: `spend-${idemKey}`,
+        meta: { prompt, theme, category },
+      },
+    ]);
 
     // Unlock wallet (deduct from lockedBalance)
     await CreditWallet.updateOne(
@@ -292,42 +325,46 @@ router.post("/mint", async (req: Request, res: Response) => {
     );
 
     // === Mint Receipt ===
-    const mintReceipt = await MintReceipt.create([{
-      mintRequestId: mintRequest[0]._id,
-      userId,
-      tokenId,
-      txHash: `0x${Math.random().toString(16).slice(2)}${Date.now().toString(16)}`,
-      chain: 'DPAL_INTERNAL',
-      metadataUri: nftAsset[0].metadataUri,
-      priceCredits: finalPriceCredits,
-      ledgerEntryId: spendLedgerEntry[0]._id,
-    }]);
+    const mintReceipt = await MintReceipt.create([
+      {
+        mintRequestId: mintRequest[0]._id,
+        userId,
+        tokenId,
+        txHash: `0x${Math.random().toString(16).slice(2)}${Date.now().toString(16)}`,
+        chain: "DPAL_INTERNAL",
+        metadataUri: nftAsset[0].metadataUri,
+        priceCredits: finalPriceCredits,
+        ledgerEntryId: spendLedgerEntry[0]._id,
+      },
+    ]);
 
     // === Ledger Entry: CREDIT (offset back if failed, not needed here) ===
 
     // === Audit Event: MINT_SUCCESS ===
-    await AuditEvent.create([{
-      actorUserId: userId,
-      action: "NFT_MINT",
-      entityType: "NftAsset",
-      entityId: nftAsset[0]._id.toString(),
-      hash: mintReceipt[0].txHash,
-      meta: {
-        tokenId,
-        prompt: prompt.trim(),
-        priceCredits: finalPriceCredits,
-        receiptId: mintReceipt[0]._id
-      }
-    }]);
+    await AuditEvent.create([
+      {
+        actorUserId: userId,
+        action: "NFT_MINT",
+        entityType: "NftAsset",
+        entityId: nftAsset[0]._id.toString(),
+        hash: mintReceipt[0].txHash,
+        meta: {
+          tokenId,
+          prompt: prompt.trim(),
+          priceCredits: finalPriceCredits,
+          receiptId: mintReceipt[0]._id,
+        },
+      },
+    ]);
 
     // === Add NFT to Hero's Collection ===
     // Add tokenId to hero's equippedNftIds (heroId should match userId)
     try {
       await Hero.findOneAndUpdate(
         { heroId: userId },
-        { 
+        {
           $addToSet: { equippedNftIds: tokenId },
-          $setOnInsert: { heroId: userId }
+          $setOnInsert: { heroId: userId },
         },
         { upsert: true }
       );
@@ -337,15 +374,31 @@ router.post("/mint", async (req: Request, res: Response) => {
       // Don't fail the mint if hero update fails - NFT is still saved
     }
 
+    if (savedPersonaId != null && String(savedPersonaId).trim() !== "") {
+      const sid = String(savedPersonaId).trim();
+      try {
+        await SavedHeroPersona.findByIdAndUpdate(sid, {
+          $set: {
+            isMinted: true,
+            tokenId,
+            metadataUri: nftAsset[0].metadataUri,
+            mintedAt: new Date(),
+          },
+        });
+      } catch (e) {
+        console.warn("SavedHeroPersona link failed (mint succeeded):", e);
+      }
+    }
+
     return res.status(200).json({
       ok: true,
       tokenId,
       imageUrl: `/api/assets/${tokenId}.png`,
       txHash: mintReceipt[0].txHash,
       priceCredits: finalPriceCredits,
-      mintedAt: mintReceipt[0].createdAt
+      mintedAt: mintReceipt[0].createdAt,
+      savedPersonaId: savedPersonaId != null ? String(savedPersonaId).trim() : undefined,
     });
-
   } catch (error: any) {
     console.error("NFT mint error:", error);
 
@@ -376,7 +429,11 @@ router.post("/mint", async (req: Request, res: Response) => {
     }
 
     // MongoDB connection errors
-    if (error.name === "MongoNetworkError" || error.message?.includes("buffering timed out") || error.message?.includes("MongoServerError")) {
+    if (
+      error.name === "MongoNetworkError" ||
+      error.message?.includes("buffering timed out") ||
+      error.message?.includes("MongoServerError")
+    ) {
       return res.status(503).json({
         error: "database_unavailable",
         message: "Database connection failed. Please check MongoDB configuration and ensure MONGODB_URI is set correctly.",

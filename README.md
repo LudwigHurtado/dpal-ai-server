@@ -2,6 +2,8 @@
 
 Backend server for the DPAL (Decentralized Public Accountability Ledger) application.
 
+**Canonical clone:** develop and deploy from this repo only (`LudwigHurtado/dpal-ai-server`). Do not maintain a second copy under another project folder; clone `C:\dpal-ai-server` (or any path) directly from GitHub.
+
 ## Setup
 
 1. Install dependencies:
@@ -49,6 +51,11 @@ Backend server for the DPAL (Decentralized Public Accountability Ledger) applica
 - `GET /api/heroes` - Get hero profiles
 - `POST /api/heroes` - Create/update hero profile
 
+### Saved hero identities (Mint Hero / front-end)
+- `POST /api/hero-personas` - Save or update a generated persona for a user (`userId` + `persona` JSON)
+- `GET /api/hero-personas?userId=` - List saved personas for that operative
+- `POST /api/nft/mint` accepts optional `savedPersonaId` to link the mint to a saved record
+
 ## Wallet & Credits System
 
 The minting system uses a credit-based wallet:
@@ -68,4 +75,5 @@ The backend uses the following MongoDB models:
 - `NftAsset` - NFT asset data (including image binary)
 - `AuditEvent` - Audit trail for all actions
 - `Hero` - Hero/operative profiles
+- `SavedHeroPersona` - Off-chain saved hero identities (linked to mint via `tokenId` when minted)
 - `Wallet` - Legacy wallet model (for compatibility)

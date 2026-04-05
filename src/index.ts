@@ -33,6 +33,7 @@ import ledgerRoutes from "./routes/ledger.routes.js";
 import nexusClientRoutes from "./routes/nexus-clients.routes.js";
 import emergencyRoutes from "./routes/emergencies.routes.js";
 import costsRoutes from "./routes/costs.routes.js";
+import heroPersonaRoutes from "./routes/heroPersona.routes.js";
 import { featureFlags } from "./config/featureFlags.js";
 
 import { mintRoute } from "./minting/mintRoute.js";
@@ -160,6 +161,7 @@ app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 app.use("/api/ai", aiRoutes);
 app.use("/api/heroes", heroRoutes);
 app.use("/api/nft", nftRoutes);
+app.use("/api/hero-personas", heroPersonaRoutes);
 app.use("/api/persona", personaRoutes);
 app.use("/api/store", storeRoutes);
 app.use("/api/reports", reportsRoutes);
