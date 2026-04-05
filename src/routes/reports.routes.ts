@@ -61,7 +61,9 @@ router.get("/feed", async (req: Request, res: Response) => {
       })
       .map((doc: any) => {
         const p = doc.payload || {};
+        const ts = doc.submittedAt || doc.anchoredAt || doc.updatedAt || new Date();
         return {
+          id: doc.reportId,
           reportId: doc.reportId,
           title: String(p.title || "Untitled report"),
           category: String(p.category || "General"),
@@ -75,6 +77,14 @@ router.get("/feed", async (req: Request, res: Response) => {
           opsStatus: normalizeOpsStatus(p.opsStatus),
           updatedAt: doc.updatedAt,
           anchoredAt: doc.anchoredAt,
+          timestamp: ts instanceof Date ? ts.toISOString() : new Date(ts).toISOString(),
+          hash: doc.reportHash,
+          txHash: doc.txHash,
+          blockNumber: doc.blockNumber,
+          chain: doc.chain,
+          trustScore: typeof p.trustScore === "number" ? p.trustScore : 70,
+          /** So hub "My Contributions" can show filings after rehydrating from API */
+          isAuthor: Boolean(p.isAuthor),
         };
       });
 
@@ -666,6 +676,7 @@ router.get("/:reportId", async (req: Request, res: Response) => {
       evidenceVault: p.evidenceVault,
       imageUrls: p.imageUrls,
       structuredData: p.structuredData,
+      isAuthor: Boolean(p.isAuthor),
     });
   } catch (error: any) {
     return res.status(500).json({ ok: false, error: "report_read_failed", message: String(error?.message || error) });
