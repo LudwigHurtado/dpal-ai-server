@@ -85,6 +85,8 @@ router.get("/feed", async (req: Request, res: Response) => {
           trustScore: typeof p.trustScore === "number" ? p.trustScore : 70,
           /** So hub "My Contributions" can show filings after rehydrating from API */
           isAuthor: Boolean(p.isAuthor),
+          imageUrls: Array.isArray(p.imageUrls) ? p.imageUrls : undefined,
+          filingImageHistory: Array.isArray(p.filingImageHistory) ? p.filingImageHistory : undefined,
         };
       });
 
