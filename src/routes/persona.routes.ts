@@ -71,8 +71,12 @@ router.post("/generate-details", async (req: Request, res: Response) => {
   try {
     const { prompt, archetype } = req.body;
 
-    if (!prompt || !archetype) {
-      return res.status(400).json({ error: "prompt and archetype are required" });
+    if (!archetype) {
+      return res.status(400).json({ error: "archetype is required" });
+    }
+    const promptText = typeof prompt === "string" ? prompt.trim() : "";
+    if (!promptText) {
+      return res.status(400).json({ error: "prompt is required" });
     }
 
     const GEMINI_API_KEY = String(process.env.GEMINI_API_KEY || "").trim();
@@ -83,7 +87,16 @@ router.post("/generate-details", async (req: Request, res: Response) => {
     const model = String(process.env.GEMINI_MODEL || "gemini-3-flash-preview").trim();
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
-    const geminiPrompt = `Persona details for ${archetype}: ${prompt}.`;
+    const geminiPrompt = `You generate JSON only for a single HUMAN community-hero persona (realistic adult person, any background).
+Rules:
+- name: a plausible real human first + last name (or common single name + surname). Not a code name like "Agent X".
+- backstory: 2-4 sentences about how they help neighbors, family, or community — grounded, warm, non-violent unless the user clearly asked otherwise. No robots/aliens/animals as the subject.
+- combatStyle: rename mentally to "presenceOrApproach" — describe how they show up for others (calm voice, organized, brave in meetings, etc.). NOT weapons or combat moves unless the user explicitly asked for that tone.
+
+Archetype tone: ${String(archetype)}.
+
+Context:
+${promptText}`;
     // This is where the generationConfig for Gemini is constructed, specifying we want a JSON response with name, backstory, combatStyle.
     // The requestBody is defined immediately after this block
 
@@ -156,9 +169,9 @@ router.post("/generate-details", async (req: Request, res: Response) => {
     }
 
     // Ensure all required fields are present
-    if (!details.name) details.name = `Agent ${archetype}`;
-    if (!details.backstory) details.backstory = `A ${archetype} operative with a mysterious past.`;
-    if (!details.combatStyle) details.combatStyle = "Tactical";
+    if (!details.name) details.name = `Neighbor ${String(archetype)}`;
+    if (!details.backstory) details.backstory = `A caring community member who helps others in everyday ways.`;
+    if (!details.combatStyle) details.combatStyle = "Warm, reliable presence";
 
     return res.status(200).json(details);
 

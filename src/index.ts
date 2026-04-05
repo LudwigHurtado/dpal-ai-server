@@ -34,6 +34,8 @@ import nexusClientRoutes from "./routes/nexus-clients.routes.js";
 import emergencyRoutes from "./routes/emergencies.routes.js";
 import costsRoutes from "./routes/costs.routes.js";
 import heroPersonaRoutes from "./routes/heroPersona.routes.js";
+import authRoutes from "./routes/auth.routes.js";
+import adminUsersRoutes from "./routes/admin.users.routes.js";
 import { featureFlags } from "./config/featureFlags.js";
 
 import { mintRoute } from "./minting/mintRoute.js";
@@ -130,6 +132,7 @@ const corsOptions: cors.CorsOptions = {
     "Authorization",
     "X-Requested-With",
     "X-Request-Id",
+    "X-Forwarded-For",
   ],
   credentials: false,
   optionsSuccessStatus: 204,
@@ -158,6 +161,8 @@ app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 /**
  * Routes
  */
+app.use("/api/auth", authRoutes);
+app.use("/api/admin", adminUsersRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api/heroes", heroRoutes);
 app.use("/api/nft", nftRoutes);

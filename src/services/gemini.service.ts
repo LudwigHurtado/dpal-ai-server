@@ -148,16 +148,16 @@ export async function generatePersonaImagePng(
 ): Promise<Buffer> {
   ensureApiKey();
 
-  // Construct a high-quality, photorealistic prompt for collectible NFT art
-  const categoryContext = input.category ? `Category: ${input.category}. ` : "";
+  const categoryContext = input.category ? `Context: ${input.category}. ` : "";
   const prompt = [
-    input.description,
-    `${categoryContext}Archetype: ${input.archetype}.`,
-    "Style: Photorealistic, ultra-high quality, 8K resolution, professional digital art, collectible NFT quality.",
-    "Visual style: Hyper-detailed, cinematic lighting, dramatic composition, museum-quality artwork.",
-    "Art direction: Realistic textures, depth of field, professional color grading, sophisticated aesthetic.",
-    "Avoid: Cartoon style, simple drawings, flat vector art, low-quality illustrations.",
-    "Output: Premium collectible digital artifact, 1:1 aspect ratio, PNG format.",
+    "Portrait commission: ONE adult HUMAN BEING only — photorealistic or high-quality realistic digital painting.",
+    "Subject must be clearly human (realistic skin, eyes, hair). Single person, bust or upper body, neutral or warm background.",
+    "FORBIDDEN as the main subject: animals, robots, aliens, monsters, angels with wings, cartoons, toy-like figures, or non-human creatures.",
+    `${categoryContext}Role / mood (human metaphor only): archetype ${input.archetype}.`,
+    `Character notes: ${input.description}`,
+    "Clothing: everyday or modest community-volunteer style unless notes suggest otherwise. No sci-fi body mods.",
+    "Lighting: soft natural or gentle studio light. Expression: approachable, trustworthy.",
+    "Style: Photorealistic or near-photorealistic, high detail, 1:1 aspect ratio, suitable as a profile portrait.",
   ].join("\n");
 
   const models = resolveImageModelChain();
