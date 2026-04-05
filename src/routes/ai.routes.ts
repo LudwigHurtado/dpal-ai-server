@@ -5,6 +5,13 @@ import { runGemini } from "../services/gemini.service.js";
 console.log("runGemini is:", typeof runGemini);
 const router = Router();
 
+/** gemini-1.5-flash is not available on current v1beta; align with GEMINI_MODEL or 2.0+ */
+function cheapModel(): string {
+  return String(
+    process.env.GEMINI_MODEL_CHEAP || process.env.GEMINI_MODEL || "gemini-2.0-flash",
+  ).trim();
+}
+
 /**
  * GET /api/ai/status
  * Used by dpal-front-end when VITE_USE_SERVER_AI=true (no browser Gemini key).
@@ -189,10 +196,7 @@ router.post("/ask", async (req, res) => {
       return res.status(400).json({ error: "Prompt required" });
     }
 
-    const modelFromTier =
-      tier === "cheap"
-        ? String(process.env.GEMINI_MODEL_CHEAP || "gemini-1.5-flash").trim()
-        : undefined;
+    const modelFromTier = tier === "cheap" ? cheapModel() : undefined;
 
     const answer = await runGemini(prompt, typeof model === "string" ? model : modelFromTier);
     return res.json({ answer });
@@ -228,15 +232,19 @@ Report summary: ${String(report?.summary || "")}
 Report severity: ${String(report?.severity || "")}
 Report location: ${String(report?.location || "")}`;
 
-    const raw = await runGemini(prompt, String(process.env.GEMINI_MODEL_CHEAP || "gemini-1.5-flash").trim());
+    const raw = await runGemini(prompt, cheapModel());
     const text = String(raw || "").trim();
 
-    let parsed: any;
+    let parsed: any = null;
     try {
       parsed = JSON.parse(text);
     } catch {
-      const match = text.match(/\{[\s\S]*\}/);
-      parsed = match ? JSON.parse(match[0]) : null;
+      try {
+        const match = text.match(/\{[\s\S]*\}/);
+        if (match?.[0]) parsed = JSON.parse(match[0]);
+      } catch {
+        parsed = null;
+      }
     }
 
     if (!parsed) {
