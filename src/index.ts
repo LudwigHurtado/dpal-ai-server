@@ -41,6 +41,7 @@ import heroPersonaRoutes from "./routes/heroPersona.routes.js";
 import authRoutes from "./routes/auth.routes.js";
 import adminUsersRoutes from "./routes/admin.users.routes.js";
 import disastersRoutes from "./routes/disasters.routes.js";
+import signalsRoutes from "./routes/signals.routes.js";
 import { featureFlags } from "./config/featureFlags.js";
 
 import { mintRoute } from "./minting/mintRoute.js";
@@ -190,6 +191,7 @@ app.use("/api/nexus-clients", nexusClientRoutes);
 app.use("/api/emergencies", emergencyRoutes);
 app.use("/api/costs", costsRoutes);
 app.use("/api/disasters", disastersRoutes);
+app.use("/api/signals", signalsRoutes);
 
 // Legacy/compat mint endpoints
 app.post("/api/mint", (req: Request, res: Response) => void mintRoute(req, res));
