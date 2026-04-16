@@ -146,6 +146,7 @@ router.patch("/projects/:id", async (req: Request, res: Response) => {
       "baselineDate",
       "evidenceUrls",
       "baselineWaterIndex",
+      "location",
     ];
     const update: Record<string, unknown> = {};
     for (const key of allowed) {
