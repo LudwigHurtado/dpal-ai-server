@@ -123,8 +123,8 @@ router.patch("/:id/status", async (req: Request, res: Response) => {
 
 router.post("/:id/enrich", async (req: Request, res: Response) => {
   try {
-    await enrichSignalWithAI(req.params.id);
-    const signal = await GlobalSignal.findOne({ signalId: req.params.id }).lean();
+    await enrichSignalWithAI(String(req.params.id));
+    const signal = await GlobalSignal.findOne({ signalId: String(req.params.id) }).lean();
     if (!signal) return res.status(404).json({ ok: false, error: "Signal not found" });
     return res.json({ ok: true, signal });
   } catch (err: unknown) {
