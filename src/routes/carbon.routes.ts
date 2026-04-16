@@ -17,6 +17,7 @@ import { MRVReport } from "../models/MRVReport.js";
 import { CarbonCredit } from "../models/CarbonCredit.js";
 import { ValidatorReview } from "../models/ValidatorReview.js";
 import { CarbonTransaction } from "../models/CarbonTransaction.js";
+import { fetchNdviForCarbon } from "../services/carbonNdvi.service.js";
 
 const router = Router();
 
@@ -65,20 +66,7 @@ function calcCarbonScore(
   );
 }
 
-/**
- * Simulated satellite data — placeholder until real APIs are integrated.
- * In production replace with calls to NASA Earthdata, Copernicus Sentinel Hub,
- * or Google Earth Engine adapters.
- */
-function simulateSatelliteData(baselineNdvi: number, monthsElapsed: number) {
-  const improvement = Math.min(0.4, monthsElapsed * 0.02 * (0.7 + Math.random() * 0.6));
-  const ndviScore = Math.min(0.95, baselineNdvi + improvement);
-  const deforestationAlert = Math.random() < 0.05; // 5% random alert
-  const vegetationChangePercent = parseFloat((improvement * 100).toFixed(1));
-  const cloudCoverPercent = Math.round(Math.random() * 30);
-  const landCoverType = ndviScore > 0.7 ? "dense_vegetation" : ndviScore > 0.4 ? "moderate_vegetation" : "sparse_vegetation";
-  return { ndviScore, vegetationChangePercent, deforestationAlert, cloudCoverPercent, landCoverType };
-}
+// simulateSatelliteData() removed — replaced by fetchNdviForCarbon() (NASA POWER real data)
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  PROJECTS
@@ -194,8 +182,13 @@ router.post("/satellite/snapshot", async (req: Request, res: Response) => {
       : Date.now() - 90 * 86400000;
     const monthsElapsed = Math.max(0, (Date.now() - baselineMs) / (30 * 86400000));
 
-    const sim = simulateSatelliteData(previousNdvi, monthsElapsed);
-    const ndviChange = parseFloat((sim.ndviScore - previousNdvi).toFixed(4));
+    // Fetch real NDVI data from NASA POWER API
+    const polygon = project.location?.polygon?.length
+      ? project.location.polygon
+      : [{ lat: project.location.gpsCenter.lat, lng: project.location.gpsCenter.lng }];
+
+    const realNdvi = await fetchNdviForCarbon(polygon, project.projectType, previousNdvi);
+    const ndviChange = parseFloat((realNdvi.ndviScore - previousNdvi).toFixed(4));
     const snapshotId = uid("SAT");
     const isBaseline = !previous;
     const date = captureDate || new Date().toISOString().split("T")[0];
@@ -203,18 +196,18 @@ router.post("/satellite/snapshot", async (req: Request, res: Response) => {
     const snapshot = await SatelliteSnapshot.create({
       snapshotId,
       projectId,
-      provider: provider || "Simulated",
-      imageUrl: "",
+      provider: realNdvi.provider,
+      imageUrl: realNdvi.imageUrl || "",
       thumbnailUrl: "",
       captureDate: date,
-      ndviScore: parseFloat(sim.ndviScore.toFixed(4)),
+      ndviScore: parseFloat(realNdvi.ndviScore.toFixed(4)),
       ndviPrevious: parseFloat(previousNdvi.toFixed(4)),
       ndviChange,
-      landCoverType: sim.landCoverType,
-      vegetationChangePercent: sim.vegetationChangePercent,
-      deforestationAlert: sim.deforestationAlert,
-      cloudCoverPercent: sim.cloudCoverPercent,
-      rawMetadata: { simulated: true, monthsElapsed: parseFloat(monthsElapsed.toFixed(1)) },
+      landCoverType: realNdvi.landCoverType,
+      vegetationChangePercent: parseFloat((ndviChange * 100).toFixed(1)),
+      deforestationAlert: realNdvi.deforestationAlert,
+      cloudCoverPercent: realNdvi.cloudCoverPercent,
+      rawMetadata: realNdvi.rawMetadata,
       isBaseline,
     });
 
@@ -226,7 +219,7 @@ router.post("/satellite/snapshot", async (req: Request, res: Response) => {
     }
 
     // Deforestation alert escalation
-    if (sim.deforestationAlert) {
+    if (realNdvi.deforestationAlert) {
       await CarbonProject.updateOne({ projectId }, { $set: { status: "review" } });
     }
 
