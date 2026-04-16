@@ -712,15 +712,25 @@ router.patch("/credits/:id/retire", async (req: Request, res: Response) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // GET /api/water/satellite-preview
-// Calls all 5 adapters with a demo bounding box and returns live satellite readings.
-// No project registration needed — used for the main dashboard "Live Satellite Feed".
-router.get("/satellite-preview", async (_req: Request, res: Response) => {
+// Calls all 5 adapters for a given location and returns live satellite readings.
+// Accepts optional ?lat=X&lng=Y&areaLabel=Name query params.
+// Falls back to Los Angeles basin reference polygon when no coords provided.
+router.get("/satellite-preview", async (req: Request, res: Response) => {
   try {
+    const qLat = parseFloat(req.query.lat as string);
+    const qLng = parseFloat(req.query.lng as string);
+    const areaLabel: string = (req.query.areaLabel as string) || "Los Angeles Basin (reference)";
+
+    // Build a ~10km bounding box around the provided center, or use default LA basin
+    const hasCoords = !isNaN(qLat) && !isNaN(qLng) && Math.abs(qLat) <= 90 && Math.abs(qLng) <= 180;
+    const centerLat = hasCoords ? qLat : 34.05;
+    const centerLng = hasCoords ? qLng : -118.25;
+    const delta = 0.05; // ~5km radius
     const demoPoly = [
-      { lat: 34.05, lng: -118.25 },
-      { lat: 34.10, lng: -118.15 },
-      { lat: 34.00, lng: -118.15 },
-      { lat: 34.00, lng: -118.30 },
+      { lat: centerLat + delta, lng: centerLng - delta },
+      { lat: centerLat + delta, lng: centerLng + delta },
+      { lat: centerLat - delta, lng: centerLng + delta },
+      { lat: centerLat - delta, lng: centerLng - delta },
     ];
     const baselineDate = "2024-01-01";
     const targetDate = new Date().toISOString().split("T")[0];
@@ -752,6 +762,9 @@ router.get("/satellite-preview", async (_req: Request, res: Response) => {
     return res.json({
       ok: true,
       capturedAt: new Date().toISOString(),
+      areaLabel,
+      centerLat,
+      centerLng,
       adapters: {
         smap: smapResult
           ? { ok: true, soilMoistureIndex: smapResult.soilMoistureIndex, confidenceScore: smapResult.confidenceScore }
