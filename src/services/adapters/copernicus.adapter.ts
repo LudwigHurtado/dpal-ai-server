@@ -114,8 +114,8 @@ async function fetchSentinel2Ndvi(
       timeRange: { from, to: toISO },
       aggregationInterval: { of: "P90D" },
       evalscript: NDVI_EVALSCRIPT,
-      resx: 0.0009,
-      resy: 0.0009,
+      width: 512,
+      height: 512,
     },
   };
 
