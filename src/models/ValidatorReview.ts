@@ -19,7 +19,7 @@ const ValidatorReviewSchema = new Schema<IValidatorReview>(
   {
     reviewId: { type: String, required: true, unique: true, index: true },
     projectId: { type: String, required: true, index: true },
-    reportId: { type: String, required: true, index: true },
+    reportId: { type: String, required: true },
     validatorId: { type: String, required: true },
     validatorName: { type: String, default: "Anonymous" },
     decision: {

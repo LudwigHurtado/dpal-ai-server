@@ -16,7 +16,7 @@ export interface IEvidenceArtifact extends Document {
 
 const EvidenceArtifactSchema = new Schema<IEvidenceArtifact>(
   {
-    reportId: { type: String, required: true, index: true },
+    reportId: { type: String, required: true },
     evidenceRefId: { type: String, required: true, unique: true, index: true },
     filename: { type: String, required: true },
     mimeType: { type: String, required: true },

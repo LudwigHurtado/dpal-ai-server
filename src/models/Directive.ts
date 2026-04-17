@@ -17,7 +17,7 @@ export interface IDirective extends Document {
 
 const DirectiveSchema = new Schema<IDirective>(
   {
-    directiveId: { type: String, required: true, index: true },
+    directiveId: { type: String, required: true },
     title: { type: String, required: true },
     category: { type: String, default: "" },
     status: { type: String, enum: ["available", "in_progress", "completed"], default: "available" },
