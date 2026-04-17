@@ -157,6 +157,25 @@ router.patch("/projects/:projectId/status", async (req: Request, res: Response) 
   }
 });
 
+// PATCH /api/carbon/projects/:projectId/location
+// Body: { lat, lng }
+router.patch("/projects/:projectId/location", async (req: Request, res: Response) => {
+  try {
+    const { lat, lng } = req.body;
+    const latN = parseFloat(lat);
+    const lngN = parseFloat(lng);
+    if (isNaN(latN) || latN < -90 || latN > 90)  return res.status(400).json({ ok: false, error: "Invalid latitude" });
+    if (isNaN(lngN) || lngN < -180 || lngN > 180) return res.status(400).json({ ok: false, error: "Invalid longitude" });
+    await CarbonProject.updateOne(
+      { projectId: req.params.projectId },
+      { $set: { "location.gpsCenter": { lat: latN, lng: lngN } } }
+    );
+    return res.json({ ok: true, lat: latN, lng: lngN });
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, error: err?.message });
+  }
+});
+
 // ═══════════════════════════════════════════════════════════════════════════════
 //  SATELLITE MONITORING
 // ═══════════════════════════════════════════════════════════════════════════════
