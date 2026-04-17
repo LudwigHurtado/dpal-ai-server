@@ -107,7 +107,6 @@ export async function fetchSentinel1Data(
             timeRange: { from, to: toISO },
             acquisitionMode: "IW",
             polarization: "DV",
-            orbitDirection: "BOTH",
           },
           processing: { backCoeff: "GAMMA0_TERRAIN", orthorectify: true },
         }],
@@ -116,8 +115,8 @@ export async function fetchSentinel1Data(
         timeRange: { from, to: toISO },
         aggregationInterval: { of: "P30D" },
         evalscript: SAR_EVALSCRIPT,
-        resx: 10,
-        resy: 10,
+        resx: 0.1,
+        resy: 0.1,
       },
     };
 
