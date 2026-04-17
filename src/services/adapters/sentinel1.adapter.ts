@@ -147,10 +147,13 @@ export async function fetchSentinel1Data(
     };
 
     const valid = (json.data ?? [])
-      .filter(d => d.status === "OK" && (d.outputs?.vv?.bands?.B0?.stats?.sampleCount ?? 0) > 0)
+      .filter(d => (d.status === "OK" || d.status === "PARTIAL") && (d.outputs?.vv?.bands?.B0?.stats?.sampleCount ?? 0) > 0)
       .sort((a, b) => new Date(b.interval.from).getTime() - new Date(a.interval.from).getTime());
 
-    if (valid.length === 0) throw new Error("No valid Sentinel-1 acquisitions found");
+    if (valid.length === 0) {
+      const statuses = (json.data ?? []).map((d: any) => d.status).join(", ");
+      throw new Error(`No valid Sentinel-1 acquisitions found (statuses: ${statuses || "none"})`);
+    }
 
     const vvMean       = valid[0].outputs.vv.bands.B0.stats.mean;
     const waterFraction = Math.max(0, Math.min(1, valid[0].outputs.water.bands.B0.stats.mean));
