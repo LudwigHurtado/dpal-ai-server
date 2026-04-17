@@ -146,7 +146,7 @@ async function fetchSentinel2Ndvi(
 
   // Find the most recent interval with valid data
   const valid = (json.data ?? [])
-    .filter(d => d.status === "OK" && d.outputs?.ndvi?.bands?.B0?.stats?.sampleCount > 0)
+    .filter(d => (d.outputs?.ndvi?.bands?.B0?.stats?.sampleCount ?? 0) > 0)
     .sort((a, b) => new Date(b.interval.from).getTime() - new Date(a.interval.from).getTime());
 
   if (valid.length === 0) return null;
