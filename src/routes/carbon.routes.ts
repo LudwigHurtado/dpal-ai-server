@@ -18,6 +18,8 @@ import { CarbonCredit } from "../models/CarbonCredit.js";
 import { ValidatorReview } from "../models/ValidatorReview.js";
 import { CarbonTransaction } from "../models/CarbonTransaction.js";
 import { fetchNdviForCarbon } from "../services/carbonNdvi.service.js";
+import { carbonGasAdapter } from "../services/adapters/carbonGas.adapter.js";
+import { mineralAdapter } from "../services/adapters/mineral.adapter.js";
 
 const router = Router();
 
@@ -688,6 +690,68 @@ router.get("/stats", async (_req: Request, res: Response) => {
     });
   } catch (err: any) {
     return res.status(500).json({ ok: false, error: err?.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  AIR QUALITY & MINERAL MONITORING
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// GET /api/carbon/air-quality
+// Real-time atmospheric CO₂, CH₄, NO₂ monitoring at a given location
+// Query: ?lat=34.05&lng=-118.25
+router.get("/air-quality", async (req: Request, res: Response) => {
+  try {
+    const { lat, lng } = req.query;
+    if (!lat || !lng) {
+      return res.status(400).json({ ok: false, error: "lat and lng query parameters required" });
+    }
+
+    const latNum = parseFloat(lat as string);
+    const lngNum = parseFloat(lng as string);
+
+    if (isNaN(latNum) || isNaN(lngNum)) {
+      return res.status(400).json({ ok: false, error: "Invalid lat/lng values" });
+    }
+
+    const data = await carbonGasAdapter.getAirQualityData(latNum, lngNum);
+    return res.json({ ok: true, ...data });
+  } catch (error: any) {
+    console.error("❌ Air quality fetch error:", error?.message || error);
+    return res.status(500).json({ 
+      ok: false, 
+      error: "Air quality request failed",
+      details: error?.message || "Unknown error"
+    });
+  }
+});
+
+// GET /api/carbon/minerals
+// Mineral composition and dust area mapping at a given location
+// Query: ?lat=34.05&lng=-118.25
+router.get("/minerals", async (req: Request, res: Response) => {
+  try {
+    const { lat, lng } = req.query;
+    if (!lat || !lng) {
+      return res.status(400).json({ ok: false, error: "lat and lng query parameters required" });
+    }
+
+    const latNum = parseFloat(lat as string);
+    const lngNum = parseFloat(lng as string);
+
+    if (isNaN(latNum) || isNaN(lngNum)) {
+      return res.status(400).json({ ok: false, error: "Invalid lat/lng values" });
+    }
+
+    const data = await mineralAdapter.getMineralData(latNum, lngNum);
+    return res.json({ ok: true, ...data });
+  } catch (error: any) {
+    console.error("❌ Mineral scan error:", error?.message || error);
+    return res.status(500).json({ 
+      ok: false, 
+      error: "Mineral scan request failed",
+      details: error?.message || "Unknown error"
+    });
   }
 });
 
