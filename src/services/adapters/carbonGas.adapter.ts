@@ -5,18 +5,35 @@ import axios from 'axios';
 const OPEN_METEO_AQ = 'https://air-quality-api.open-meteo.com/v1/air-quality';
 
 // NOAA Mauna Loa Observatory global CO₂ background (2025 annual mean ~424 ppm).
-// Local surface CO₂ deviations require OCO-2/OCO-3 Level-2 data; those products
-// need NASA Earthdata auth. We use the scientifically accurate global background
-// and disclose it clearly to the caller.
 const CO2_GLOBAL_BACKGROUND_PPM = 424.3;
 
 // CH₄ conversion: Open-Meteo returns µg/m³; 1 ppb CH₄ ≈ 0.653 µg/m³ at 15 °C, 1 atm
 const CH4_UG_M3_PER_PPB = 0.653;
 
-interface AirQualityResult {
+// CO conversion: 1 ppb CO ≈ 1.145 µg/m³ at standard conditions
+const CO_UG_M3_PER_PPB = 1.145;
+
+export interface AirQualityResult {
+  // Greenhouse gases
   co2ppm: number | null;
   ch4ppb: number | null;
-  no2: number | null; // µg/m³
+  // Criteria pollutants (all µg/m³ unless noted)
+  no2: number | null;
+  so2: number | null;
+  o3: number | null;
+  coUgM3: number | null;
+  coPpb: number | null;
+  nh3: number | null;
+  // Particulates
+  pm25: number | null;
+  pm10: number | null;
+  dust: number | null;
+  // Air quality indices
+  europeanAqi: number | null;
+  usAqi: number | null;
+  // UV
+  uvIndex: number | null;
+  // Meta
   captureDate: string;
   source: string;
   dataAvailable: boolean;
@@ -41,7 +58,20 @@ export const carbonGasAdapter = {
         params: {
           latitude: lat,
           longitude: lng,
-          hourly: 'nitrogen_dioxide,methane',
+          hourly: [
+            'nitrogen_dioxide',
+            'sulphur_dioxide',
+            'ozone',
+            'carbon_monoxide',
+            'ammonia',
+            'methane',
+            'pm10',
+            'pm2_5',
+            'dust',
+            'european_aqi',
+            'us_aqi',
+            'uv_index',
+          ].join(','),
           timezone: 'auto',
           forecast_days: 1,
         },
@@ -49,39 +79,72 @@ export const carbonGasAdapter = {
       });
 
       const hourly = response.data?.hourly ?? {};
-      const no2Raw = latestValue(hourly.nitrogen_dioxide ?? []);   // µg/m³
-      const ch4Raw = latestValue(hourly.methane ?? []);            // µg/m³
+
+      const no2Raw   = latestValue(hourly.nitrogen_dioxide  ?? []);
+      const so2Raw   = latestValue(hourly.sulphur_dioxide   ?? []);
+      const o3Raw    = latestValue(hourly.ozone             ?? []);
+      const coRaw    = latestValue(hourly.carbon_monoxide   ?? []);
+      const nh3Raw   = latestValue(hourly.ammonia           ?? []);
+      const ch4Raw   = latestValue(hourly.methane           ?? []);
+      const pm25Raw  = latestValue(hourly.pm2_5             ?? []);
+      const pm10Raw  = latestValue(hourly.pm10              ?? []);
+      const dustRaw  = latestValue(hourly.dust              ?? []);
+      const euAqi    = latestValue(hourly.european_aqi      ?? []);
+      const usAqi    = latestValue(hourly.us_aqi            ?? []);
+      const uvRaw    = latestValue(hourly.uv_index          ?? []);
 
       const ch4ppb = ch4Raw !== null ? Math.round(ch4Raw / CH4_UG_M3_PER_PPB) : null;
+      const coPpb  = coRaw  !== null ? Math.round(coRaw  / CO_UG_M3_PER_PPB)  : null;
 
       return {
         co2ppm: CO2_GLOBAL_BACKGROUND_PPM,
         ch4ppb,
         no2: no2Raw,
+        so2: so2Raw,
+        o3: o3Raw,
+        coUgM3: coRaw,
+        coPpb,
+        nh3: nh3Raw,
+        pm25: pm25Raw,
+        pm10: pm10Raw,
+        dust: dustRaw,
+        europeanAqi: euAqi,
+        usAqi,
+        uvIndex: uvRaw,
         captureDate,
-        source: 'Copernicus CAMS via Open-Meteo (NO₂, CH₄) · NOAA Mauna Loa background (CO₂)',
+        source: 'Copernicus CAMS via Open-Meteo · NOAA Mauna Loa background (CO₂)',
         dataAvailable: true,
         measurementStatus: 'verified',
         message:
           'CO₂ is the NOAA 2025 global background (424.3 ppm). ' +
-          'NO₂ and CH₄ are Copernicus Atmosphere Monitoring Service (CAMS) model values ' +
-          'provided by Open-Meteo — free, no-auth, updated hourly.',
+          'All other values are Copernicus Atmosphere Monitoring Service (CAMS) model output ' +
+          'via Open-Meteo — free, no-auth, updated hourly.',
       };
     } catch (error: any) {
       console.error('❌ carbonGasAdapter Open-Meteo error:', error?.message || error);
 
-      // Fall back to CO₂ background only — still honest, still useful
       return {
         co2ppm: CO2_GLOBAL_BACKGROUND_PPM,
         ch4ppb: null,
         no2: null,
+        so2: null,
+        o3: null,
+        coUgM3: null,
+        coPpb: null,
+        nh3: null,
+        pm25: null,
+        pm10: null,
+        dust: null,
+        europeanAqi: null,
+        usAqi: null,
+        uvIndex: null,
         captureDate,
         source: 'NOAA Mauna Loa global background (CO₂) · Open-Meteo unavailable',
         dataAvailable: true,
         measurementStatus: 'verified',
         message:
           'CO₂ is the NOAA 2025 global background (424.3 ppm). ' +
-          'Live NO₂ / CH₄ data temporarily unavailable — Open-Meteo did not respond.',
+          'Live pollutant data temporarily unavailable — Open-Meteo did not respond.',
       };
     }
   },
