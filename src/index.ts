@@ -42,6 +42,7 @@ import authRoutes from "./routes/auth.routes.js";
 import adminUsersRoutes from "./routes/admin.users.routes.js";
 import disastersRoutes from "./routes/disasters.routes.js";
 import signalsRoutes from "./routes/signals.routes.js";
+import earthObservationRoutes from "./routes/earth-observation.routes.js";
 import { featureFlags } from "./config/featureFlags.js";
 
 import { mintRoute } from "./minting/mintRoute.js";
@@ -192,6 +193,7 @@ app.use("/api/emergencies", emergencyRoutes);
 app.use("/api/costs", costsRoutes);
 app.use("/api/disasters", disastersRoutes);
 app.use("/api/signals", signalsRoutes);
+app.use("/api/earth-observation", earthObservationRoutes);
 
 // Legacy/compat mint endpoints
 app.post("/api/mint", (req: Request, res: Response) => void mintRoute(req, res));
