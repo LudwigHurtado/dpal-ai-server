@@ -96,7 +96,7 @@ export async function fetchSentinel1Data(
 
     const now  = new Date();
     const toISO  = now.toISOString().replace(/\.\d+Z$/, "Z");
-    const from   = new Date(now.getTime() - 30 * 86_400_000).toISOString().replace(/\.\d+Z$/, "Z");
+    const from   = new Date(now.getTime() - 60 * 86_400_000).toISOString().replace(/\.\d+Z$/, "Z");
 
     const body = {
       input: {
@@ -109,7 +109,6 @@ export async function fetchSentinel1Data(
           dataFilter: {
             timeRange: { from, to: toISO },
             acquisitionMode: "IW",
-            polarization: "DV",
           },
           processing: { backCoeff: "GAMMA0_TERRAIN", orthorectify: true },
         }],
@@ -118,8 +117,8 @@ export async function fetchSentinel1Data(
         timeRange: { from, to: toISO },
         aggregationInterval: { of: "P30D" },
         evalscript: SAR_EVALSCRIPT,
-        width: 512,
-        height: 512,
+        width: 128,
+        height: 128,
       },
     };
 
