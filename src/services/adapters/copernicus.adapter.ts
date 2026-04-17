@@ -100,6 +100,7 @@ async function fetchSentinel2Ndvi(
     input: {
       bounds: {
         geometry: { type: "Polygon", coordinates: [ring] },
+        properties: { crs: "http://www.opengis.net/def/crs/OGC/1.3/CRS84" },
       },
       data: [{
         type: "sentinel-2-l2a",
@@ -113,8 +114,8 @@ async function fetchSentinel2Ndvi(
       timeRange: { from, to: toISO },
       aggregationInterval: { of: "P90D" },
       evalscript: NDVI_EVALSCRIPT,
-      resx: 0.1,
-      resy: 0.1,
+      resx: 0.0009,
+      resy: 0.0009,
     },
   };
 
