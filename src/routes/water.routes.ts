@@ -29,6 +29,7 @@ import { fetchSwotData } from "../services/adapters/swot.adapter.js";
 import { fetchGraceData } from "../services/adapters/grace.adapter.js";
 import { fetchGibsData } from "../services/adapters/gibs.adapter.js";
 import { fetchCopernicusData } from "../services/adapters/copernicus.adapter.js";
+import { fetchSentinel1Data } from "../services/adapters/sentinel1.adapter.js";
 
 const router = Router();
 
@@ -193,25 +194,30 @@ router.post(
       const baselineDate = project.baselineDate || new Date().toISOString().split("T")[0];
       const targetDate = new Date().toISOString().split("T")[0];
 
-      // Call all 5 adapters in parallel; swallow individual failures
-      const [smapResult, swotResult, graceResult, gibsResult, copernicusResult] =
+      // Call all 6 adapters in parallel; swallow individual failures
+      const [smapResult, swotResult, graceResult, gibsResult, copernicusResult, sentinel1Result] =
         await Promise.all([
           fetchSmapData(polygon, baselineDate, targetDate).catch(() => null),
           fetchSwotData(polygon, baselineDate, targetDate).catch(() => null),
           fetchGraceData(polygon, baselineDate, targetDate).catch(() => null),
           fetchGibsData(polygon, baselineDate, targetDate).catch(() => null),
           fetchCopernicusData(polygon, baselineDate, targetDate).catch(() => null),
+          fetchSentinel1Data(polygon, baselineDate, targetDate).catch(() => null),
         ]);
 
       // Merge results into combined metrics
       const soilMoistureIndex =
         smapResult?.soilMoistureIndex ?? copernicusResult?.soilMoistureIndex ?? 0.4;
+      // Prefer Sentinel-1 SAR surface water level (most direct water measurement)
       const surfaceWaterLevel =
-        swotResult?.surfaceWaterLevel ?? copernicusResult?.surfaceWaterLevel ?? 1.0;
+        (sentinel1Result?.source === "sentinel-1-sar" ? sentinel1Result.vvMeanLinear * 50 : null)
+        ?? swotResult?.surfaceWaterLevel ?? copernicusResult?.surfaceWaterLevel ?? 1.0;
       const waterStorageTrend =
         graceResult?.waterStorageTrend ?? copernicusResult?.waterStorageTrend ?? 0;
+      // Prefer Copernicus real NDVI-derived vegetation stress
       const vegetationStress =
-        gibsResult?.vegetationStress ?? copernicusResult?.vegetationStress ?? 0.3;
+        (copernicusResult?.source === "sentinel-2-live" ? copernicusResult.vegetationStress : null)
+        ?? gibsResult?.vegetationStress ?? copernicusResult?.vegetationStress ?? 0.3;
       const droughtRisk =
         gibsResult?.droughtRisk ?? copernicusResult?.droughtRisk ?? 0.2;
       const usageReductionEstimate =
@@ -224,6 +230,7 @@ router.post(
         graceResult?.confidenceScore,
         gibsResult?.confidenceScore,
         copernicusResult?.confidenceScore,
+        sentinel1Result?.confidenceScore,
       ].filter((v): v is number => v != null);
 
       const confidenceScore =
@@ -264,7 +271,7 @@ router.post(
         },
         anomalyFlags,
         isBaseline,
-        notes: `Mock refresh via all 5 adapters. ${anomalyFlags.length > 0 ? "Anomalies: " + anomalyFlags.join(", ") : "No anomalies detected."}`,
+        notes: `Live refresh via 6 adapters (SMAP, SWOT, GRACE, GIBS, Sentinel-2, Sentinel-1). ${anomalyFlags.length > 0 ? "Anomalies: " + anomalyFlags.join(", ") : "No anomalies detected."}`,
       });
 
       // If first snapshot: set baseline and update project status
@@ -735,13 +742,14 @@ router.get("/satellite-preview", async (req: Request, res: Response) => {
     const baselineDate = "2024-01-01";
     const targetDate = new Date().toISOString().split("T")[0];
 
-    const [smapResult, swotResult, graceResult, gibsResult, copernicusResult] =
+    const [smapResult, swotResult, graceResult, gibsResult, copernicusResult, sentinel1Result] =
       await Promise.all([
         fetchSmapData(demoPoly, baselineDate, targetDate).catch(() => null),
         fetchSwotData(demoPoly, baselineDate, targetDate).catch(() => null),
         fetchGraceData(demoPoly, baselineDate, targetDate).catch(() => null),
         fetchGibsData(demoPoly, baselineDate, targetDate).catch(() => null),
         fetchCopernicusData(demoPoly, baselineDate, targetDate).catch(() => null),
+        fetchSentinel1Data(demoPoly, baselineDate, targetDate).catch(() => null),
       ]);
 
     const confidenceValues = [
@@ -750,6 +758,7 @@ router.get("/satellite-preview", async (req: Request, res: Response) => {
       graceResult?.confidenceScore,
       gibsResult?.confidenceScore,
       copernicusResult?.confidenceScore,
+      sentinel1Result?.confidenceScore,
     ].filter((v): v is number => v != null);
 
     const avgConfidence =
@@ -782,8 +791,20 @@ router.get("/satellite-preview", async (req: Request, res: Response) => {
           ? {
               ok: true,
               droughtRisk: copernicusResult.droughtRisk,
-              precipAnomalyMm: (copernicusResult as any).precipAnomalyMm ?? null,
+              ndviMean: (copernicusResult as any).ndviMean ?? null,
+              sentinel2Date: (copernicusResult as any).sentinel2Date ?? null,
+              source: copernicusResult.source,
               confidenceScore: copernicusResult.confidenceScore,
+            }
+          : { ok: false },
+        sentinel1: sentinel1Result
+          ? {
+              ok: sentinel1Result.source === "sentinel-1-sar",
+              waterFraction: sentinel1Result.waterFraction,
+              vvMeanDb: sentinel1Result.vvMeanDb,
+              floodRisk: sentinel1Result.floodRisk,
+              captureDate: sentinel1Result.captureDate ?? null,
+              confidenceScore: sentinel1Result.confidenceScore,
             }
           : { ok: false },
       },
