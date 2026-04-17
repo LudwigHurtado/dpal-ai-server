@@ -8,6 +8,12 @@ export interface IWaterSnapshotMetrics {
   droughtRisk?: number;            // 0–1
   usageReductionEstimate?: number; // 0–1
   confidenceScore: number;         // 0–1
+  // Sentinel-1 SAR water detection
+  sarWaterFraction?: number;       // 0–1 fraction of AOI covered by water
+  sarVvDb?: number;                // mean VV backscatter in dB (typically −25 to 0)
+  sarFloodRisk?: number;           // 0–1
+  sarCaptureDate?: string;         // most recent SAR acquisition date
+  sarSource?: string;              // "sentinel-1-sar" | "unavailable"
 }
 
 export interface IWaterSnapshot extends Document {
@@ -37,6 +43,11 @@ const MetricsSchema = new Schema<IWaterSnapshotMetrics>(
     droughtRisk: { type: Number },
     usageReductionEstimate: { type: Number },
     confidenceScore: { type: Number, required: true, default: 0 },
+    sarWaterFraction: { type: Number },
+    sarVvDb: { type: Number },
+    sarFloodRisk: { type: Number },
+    sarCaptureDate: { type: String },
+    sarSource: { type: String },
   },
   { _id: false }
 );

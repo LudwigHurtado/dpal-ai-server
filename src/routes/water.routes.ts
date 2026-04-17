@@ -268,6 +268,14 @@ router.post(
           droughtRisk: parseFloat(droughtRisk.toFixed(3)),
           usageReductionEstimate: parseFloat(usageReductionEstimate.toFixed(3)),
           confidenceScore,
+          // Sentinel-1 SAR water detection fields
+          ...(sentinel1Result?.source === "sentinel-1-sar" ? {
+            sarWaterFraction: sentinel1Result.waterFraction,
+            sarVvDb:          sentinel1Result.vvMeanDb,
+            sarFloodRisk:     sentinel1Result.floodRisk,
+            sarCaptureDate:   sentinel1Result.captureDate,
+            sarSource:        sentinel1Result.source,
+          } : {}),
         },
         anomalyFlags,
         isBaseline,
