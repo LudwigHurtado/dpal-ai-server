@@ -141,6 +141,28 @@ router.get("/projects/:projectId", async (req: Request, res: Response) => {
   }
 });
 
+// PATCH /api/carbon/projects/:projectId
+// General project update — allowed fields only
+router.patch("/projects/:projectId", async (req: Request, res: Response) => {
+  try {
+    const allowed = ["projectName", "projectType", "description", "totalAcres", "baselineDate", "location"];
+    const update: Record<string, unknown> = {};
+    for (const key of allowed) {
+      if (key in req.body) update[key] = req.body[key];
+    }
+    if (!Object.keys(update).length) return res.status(400).json({ ok: false, error: "No updatable fields" });
+    const project = await CarbonProject.findOneAndUpdate(
+      { projectId: req.params.projectId },
+      { $set: update },
+      { new: true }
+    ).lean();
+    if (!project) return res.status(404).json({ ok: false, error: "Not found" });
+    return res.json({ ok: true, project });
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, error: err?.message });
+  }
+});
+
 // PATCH /api/carbon/projects/:projectId/status
 // Body: { status, adminNotes? }
 router.patch("/projects/:projectId/status", async (req: Request, res: Response) => {
