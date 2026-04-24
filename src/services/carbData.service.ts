@@ -53,8 +53,15 @@ const aliasMap: Record<string, string[]> = {
   latitude: ["latitude", "lat"],
   longitude: ["longitude", "lng", "lon"],
   sector: ["sector", "industry"],
-  reportingYear: ["reporting_year", "year"],
-  totalCO2e: ["total_co2e", "emissions_co2e", "total emissions", "total_emissions"],
+  reportingYear: ["reporting_year", "report year", "year"],
+  totalCO2e: [
+    "total_co2e",
+    "emissions_co2e",
+    "total emissions",
+    "total_emissions",
+    "total emissions (metric tons co2e)",
+    "total co2e (combustion, process, vented, and supplier)",
+  ],
   methaneCH4: ["ch4", "methane", "methane_ch4"],
   nitrousOxideN2O: ["n2o", "nitrous_oxide", "nitrous_oxide_n2o"],
   carbonDioxideCO2: ["co2", "carbon_dioxide", "carbon_dioxide_co2"],
@@ -158,8 +165,18 @@ function csvToRows(csvText: string): Record<string, unknown>[] {
     .map((line) => line.trim())
     .filter(Boolean);
   if (lines.length < 2) return [];
-  const headers = parseCsvRow(lines[0]);
-  return lines.slice(1).map((line) => {
+
+  const headerIndex = lines.findIndex((line) => {
+    const cols = parseCsvRow(line).map((h) => normalizeKey(h));
+    const hasFacilityId = cols.some((h) => aliasMap.facilityId.some((a) => normalizeKey(a) === h));
+    const hasFacilityName = cols.some((h) => aliasMap.facilityName.some((a) => normalizeKey(a) === h));
+    const hasYear = cols.some((h) => aliasMap.reportingYear.some((a) => normalizeKey(a) === h));
+    return hasFacilityId && hasFacilityName && hasYear;
+  });
+  if (headerIndex < 0) return [];
+
+  const headers = parseCsvRow(lines[headerIndex]);
+  return lines.slice(headerIndex + 1).map((line) => {
     const cols = parseCsvRow(line);
     const out: Record<string, unknown> = {};
     headers.forEach((h, idx) => {
