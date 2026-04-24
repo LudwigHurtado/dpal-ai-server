@@ -243,18 +243,51 @@ function applySearch(records: CARBFacilityRecord[], params: SearchParams): CARBF
   const year = params.year;
   const limit = Math.min(Math.max(params.limit ?? 50, 1), 500);
 
-  return records
+  const filtered = records
     .filter((r) => {
-      if (q && !(r.facilityName.toLowerCase().includes(q) || r.operatorName.toLowerCase().includes(q) || r.facilityId.toLowerCase().includes(q))) return false;
+      if (q) {
+        const facility = r.facilityName.toLowerCase();
+        const operator = r.operatorName.toLowerCase();
+        const id = r.facilityId.toLowerCase();
+        const startsWithHit = facility.startsWith(q) || operator.startsWith(q) || id.startsWith(q);
+        const includesHit = facility.includes(q) || operator.includes(q) || id.includes(q);
+        if (!startsWithHit && !includesHit) return false;
+      }
       if (facilityId && !r.facilityId.toLowerCase().includes(facilityId)) return false;
       if (city && !r.city.toLowerCase().includes(city)) return false;
       if (county && !r.county.toLowerCase().includes(county)) return false;
       if (sector && !r.sector.toLowerCase().includes(sector)) return false;
       if (year && r.reportingYear !== year) return false;
       return true;
-    })
-    .sort((a, b) => b.reportingYear - a.reportingYear)
-    .slice(0, limit);
+    });
+
+  // Sort alphabetically by facility, then operator, then newest year.
+  const sorted = filtered.sort((a, b) => {
+    const facilityCompare = a.facilityName.localeCompare(b.facilityName, undefined, { sensitivity: "base" });
+    if (facilityCompare !== 0) return facilityCompare;
+    const operatorCompare = a.operatorName.localeCompare(b.operatorName, undefined, { sensitivity: "base" });
+    if (operatorCompare !== 0) return operatorCompare;
+    return b.reportingYear - a.reportingYear;
+  });
+
+  if (!q) return sorted.slice(0, limit);
+
+  // When a query is provided, prioritize prefix matches first.
+  const startsWithMatches = sorted.filter((r) => {
+    const facility = r.facilityName.toLowerCase();
+    const operator = r.operatorName.toLowerCase();
+    const id = r.facilityId.toLowerCase();
+    return facility.startsWith(q) || operator.startsWith(q) || id.startsWith(q);
+  });
+  const containsMatches = sorted.filter((r) => {
+    const facility = r.facilityName.toLowerCase();
+    const operator = r.operatorName.toLowerCase();
+    const id = r.facilityId.toLowerCase();
+    const starts = facility.startsWith(q) || operator.startsWith(q) || id.startsWith(q);
+    return !starts && (facility.includes(q) || operator.includes(q) || id.includes(q));
+  });
+
+  return [...startsWithMatches, ...containsMatches].slice(0, limit);
 }
 
 function dedupeRecords(records: CARBFacilityRecord[]): CARBFacilityRecord[] {
