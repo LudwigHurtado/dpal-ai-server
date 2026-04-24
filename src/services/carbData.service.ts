@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import * as XLSX from "xlsx";
 
 export type SourceMode = "LIVE" | "IMPORTED" | "DEMO_FALLBACK";
 export type CarbSourceStatus =
@@ -102,6 +103,22 @@ let importedMeta: { datasetVersion: string; retrievalDate: string } = {
   retrievalDate: new Date().toISOString().slice(0, 10),
 };
 let importedBootstrapped = false;
+
+function getConfiguredLiveUrl(): string | null {
+  const raw = process.env.CARB_LIVE_DATA_URL?.trim();
+  if (!raw) return null;
+  const normalized = raw.toLowerCase();
+  // Ignore template/placeholder values copied from setup docs.
+  if (
+    normalized.includes("your-hosted-carb-file") ||
+    normalized.includes("example.com") ||
+    normalized.includes("placeholder") ||
+    normalized.includes("your-url-here")
+  ) {
+    return null;
+  }
+  return raw;
+}
 
 const toNumOrNull = (value: unknown): number | null => {
   if (value === null || value === undefined || value === "") return null;
@@ -340,16 +357,33 @@ async function loadImportedFromDiskIfAny(): Promise<void> {
 }
 
 async function fetchLiveDataset(): Promise<{ records: CARBFacilityRecord[]; warnings: string[] }> {
-  const liveUrl = process.env.CARB_LIVE_DATA_URL?.trim();
+  const liveUrl = getConfiguredLiveUrl();
   if (!liveUrl) return { records: [], warnings: ["No live CARB source configured. Set CARB_LIVE_DATA_URL to enable live mode."] };
   try {
     const response = await fetch(liveUrl);
     if (!response.ok) return { records: [], warnings: [`Live CARB source returned HTTP ${response.status}.`] };
     const contentType = response.headers.get("content-type") ?? "";
-    const body = await response.text();
-    const rows: Record<string, unknown>[] = contentType.includes("json")
-      ? (Array.isArray(JSON.parse(body)) ? JSON.parse(body) : [])
-      : csvToRows(body);
+    const lowerUrl = liveUrl.toLowerCase();
+    let rows: Record<string, unknown>[] = [];
+
+    if (
+      contentType.includes("spreadsheetml") ||
+      contentType.includes("application/vnd.ms-excel") ||
+      lowerUrl.endsWith(".xlsx") ||
+      lowerUrl.endsWith(".xls")
+    ) {
+      const bytes = await response.arrayBuffer();
+      const workbook = XLSX.read(bytes, { type: "array" });
+      const firstSheetName = workbook.SheetNames[0];
+      const firstSheet = firstSheetName ? workbook.Sheets[firstSheetName] : undefined;
+      rows = firstSheet ? XLSX.utils.sheet_to_json<Record<string, unknown>>(firstSheet, { defval: "" }) : [];
+    } else {
+      const body = await response.text();
+      rows = contentType.includes("json")
+        ? (Array.isArray(JSON.parse(body)) ? JSON.parse(body) : [])
+        : csvToRows(body);
+    }
+
     const records = rows.map((row) =>
       normalizeRow(row, {
         dataSource: "CARB live/public dataset",
@@ -387,7 +421,7 @@ export async function searchCarbFacilityRecords(params: SearchParams): Promise<{
   } else if (importedRecords.length) {
     selected = importedRecords;
     sourceMode = "IMPORTED";
-    if (process.env.CARB_LIVE_DATA_URL && live.warnings.length) {
+    if (getConfiguredLiveUrl() && live.warnings.length) {
       warnings.push(...live.warnings);
     }
   } else {
