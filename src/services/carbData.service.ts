@@ -391,10 +391,18 @@ export async function searchCarbFacilityRecords(params: SearchParams): Promise<{
       warnings.push(...live.warnings);
     }
   } else {
-    selected = demoFallback.map((row) => ({ ...row, sourceStatus: "DEMO DATA" }));
+    const demoEnabled = (process.env.CARB_ENABLE_DEMO_FALLBACK ?? "").toLowerCase() === "true";
     sourceMode = "DEMO_FALLBACK";
     warnings.push(...live.warnings);
-    warnings.push("Using demo fallback records because live/imported CARB data is unavailable.");
+    if (demoEnabled) {
+      selected = demoFallback.map((row) => ({ ...row, sourceStatus: "DEMO DATA" }));
+      warnings.push("Using demo fallback records because live/imported CARB data is unavailable.");
+    } else {
+      selected = [];
+      warnings.push(
+        "No live or imported CARB records available. Demo fallback is disabled (set CARB_ENABLE_DEMO_FALLBACK=true to enable).",
+      );
+    }
   }
 
   const results = applySearch(dedupeRecords(selected), params);
