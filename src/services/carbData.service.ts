@@ -203,6 +203,40 @@ function csvToRows(csvText: string): Record<string, unknown>[] {
   });
 }
 
+function isLikelyHeaderRow(cells: unknown[]): boolean {
+  const cols = cells.map((c) => normalizeKey(String(c ?? ""))).filter(Boolean);
+  if (!cols.length) return false;
+  const hasFacilityId = cols.some((h) => aliasMap.facilityId.some((a) => normalizeKey(a) === h));
+  const hasFacilityName = cols.some((h) => aliasMap.facilityName.some((a) => normalizeKey(a) === h));
+  const hasYear = cols.some((h) => aliasMap.reportingYear.some((a) => normalizeKey(a) === h));
+  return hasFacilityId && hasFacilityName && hasYear;
+}
+
+function xlsxToRows(bytes: ArrayBuffer): Record<string, unknown>[] {
+  const workbook = XLSX.read(bytes, { type: "array" });
+  for (const sheetName of workbook.SheetNames) {
+    const sheet = workbook.Sheets[sheetName];
+    if (!sheet) continue;
+    const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "" });
+    if (!Array.isArray(matrix) || matrix.length < 2) continue;
+    const headerIndex = matrix.findIndex((row) => Array.isArray(row) && isLikelyHeaderRow(row));
+    if (headerIndex < 0) continue;
+    const headerRow = matrix[headerIndex] as unknown[];
+    const headers = headerRow.map((h) => String(h ?? "").trim());
+    const rows: Record<string, unknown>[] = [];
+    for (const dataRow of matrix.slice(headerIndex + 1)) {
+      if (!Array.isArray(dataRow)) continue;
+      const out: Record<string, unknown> = {};
+      headers.forEach((h, idx) => {
+        out[h] = dataRow[idx] ?? "";
+      });
+      rows.push(out);
+    }
+    if (rows.length) return rows;
+  }
+  return [];
+}
+
 function normalizeRow(
   row: Record<string, unknown>,
   sourceInfo: { dataSource: string; sourceUrl?: string; datasetVersion: string; retrievalDate: string; baseStatus: CarbSourceStatus },
@@ -373,10 +407,7 @@ async function fetchLiveDataset(): Promise<{ records: CARBFacilityRecord[]; warn
       lowerUrl.endsWith(".xls")
     ) {
       const bytes = await response.arrayBuffer();
-      const workbook = XLSX.read(bytes, { type: "array" });
-      const firstSheetName = workbook.SheetNames[0];
-      const firstSheet = firstSheetName ? workbook.Sheets[firstSheetName] : undefined;
-      rows = firstSheet ? XLSX.utils.sheet_to_json<Record<string, unknown>>(firstSheet, { defval: "" }) : [];
+      rows = xlsxToRows(bytes);
     } else {
       const body = await response.text();
       rows = contentType.includes("json")
@@ -384,15 +415,18 @@ async function fetchLiveDataset(): Promise<{ records: CARBFacilityRecord[]; warn
         : csvToRows(body);
     }
 
-    const records = rows.map((row) =>
-      normalizeRow(row, {
-        dataSource: "CARB live/public dataset",
-        sourceUrl: liveUrl,
-        datasetVersion: process.env.CARB_LIVE_DATASET_VERSION || "live-unknown",
-        retrievalDate: new Date().toISOString().slice(0, 10),
-        baseStatus: "CARB PUBLIC DATA",
-      }),
-    );
+    const records = rows
+      .map((row) =>
+        normalizeRow(row, {
+          dataSource: "CARB live/public dataset",
+          sourceUrl: liveUrl,
+          datasetVersion: process.env.CARB_LIVE_DATASET_VERSION || "live-unknown",
+          retrievalDate: new Date().toISOString().slice(0, 10),
+          baseStatus: "CARB PUBLIC DATA",
+        }),
+      )
+      // Avoid surfacing placeholder "Unknown Facility" rows from metadata/title lines.
+      .filter((row) => row.facilityName !== "Unknown Facility" && row.totalCO2e != null);
     return { records, warnings: [] };
   } catch (error) {
     return { records: [], warnings: [`Live CARB source fetch failed: ${error instanceof Error ? error.message : "unknown error"}`] };
