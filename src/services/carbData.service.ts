@@ -240,6 +240,18 @@ function applySearch(records: CARBFacilityRecord[], params: SearchParams): CARBF
     .slice(0, limit);
 }
 
+function dedupeRecords(records: CARBFacilityRecord[]): CARBFacilityRecord[] {
+  const seen = new Set<string>();
+  const out: CARBFacilityRecord[] = [];
+  for (const row of records) {
+    const key = `${row.facilityId}::${row.reportingYear}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(row);
+  }
+  return out;
+}
+
 async function loadImportedFromDiskIfAny(): Promise<void> {
   if (importedBootstrapped) return;
   importedBootstrapped = true;
@@ -311,24 +323,31 @@ export async function searchCarbFacilityRecords(params: SearchParams): Promise<{
 }> {
   const warnings: string[] = [];
   const live = await fetchLiveDataset();
-  warnings.push(...live.warnings);
+  await loadImportedFromDiskIfAny();
 
+  // Prefer fullest possible response set: merge LIVE + IMPORTED whenever LIVE is available.
+  // If LIVE is unavailable, use IMPORTED before DEMO fallback.
   let sourceMode: SourceMode = "LIVE";
-  let selected = live.records;
+  let selected: CARBFacilityRecord[] = [];
 
-  if (!selected.length) {
-    await loadImportedFromDiskIfAny();
-    if (importedRecords.length) {
-      sourceMode = "IMPORTED";
-      selected = importedRecords;
-    } else {
-      sourceMode = "DEMO_FALLBACK";
-      selected = demoFallback.map((row) => ({ ...row, sourceStatus: "DEMO DATA" }));
-      warnings.push("Using demo fallback records because live/imported CARB data is unavailable.");
+  if (live.records.length) {
+    selected = dedupeRecords([...live.records, ...importedRecords]);
+    sourceMode = "LIVE";
+    if (live.warnings.length) warnings.push(...live.warnings);
+  } else if (importedRecords.length) {
+    selected = importedRecords;
+    sourceMode = "IMPORTED";
+    if (process.env.CARB_LIVE_DATA_URL && live.warnings.length) {
+      warnings.push(...live.warnings);
     }
+  } else {
+    selected = demoFallback.map((row) => ({ ...row, sourceStatus: "DEMO DATA" }));
+    sourceMode = "DEMO_FALLBACK";
+    warnings.push(...live.warnings);
+    warnings.push("Using demo fallback records because live/imported CARB data is unavailable.");
   }
 
-  const results = applySearch(selected, params);
+  const results = applySearch(dedupeRecords(selected), params);
   return { results, count: results.length, sourceMode, warnings };
 }
 
