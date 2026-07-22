@@ -7,9 +7,9 @@ on:
       - "src/models/ReedyRiver*.ts"
       - "src/services/reedyRiver.service.ts"
       - "src/services/reedyRiver.service.*.ts"
-      - "src/routes/reedyRiver.routes.ts"
+      - "src/routes/reedyRiver*.routes.ts"
       - "src/routes/ecology.routes.ts"
-      - "docs/REEDY_RIVER_LIVE_OPERATIONS.md"
+      - "docs/REEDY_RIVER*.md"
       - ".github/workflows/reedy-river-ci.yml"
   push:
     branches: [main]
@@ -18,8 +18,9 @@ on:
       - "src/models/ReedyRiver*.ts"
       - "src/services/reedyRiver.service.ts"
       - "src/services/reedyRiver.service.*.ts"
-      - "src/routes/reedyRiver.routes.ts"
+      - "src/routes/reedyRiver*.routes.ts"
       - "src/routes/ecology.routes.ts"
+      - "docs/REEDY_RIVER*.md"
 
 permissions:
   contents: read
@@ -51,8 +52,10 @@ jobs:
           path: reedy-river-typecheck.log
           if-no-files-found: error
           retention-days: 7
-      - name: Reedy River evidence and integration self-tests
+      - name: Reedy River evidence, regulation, capture, and workflow self-tests
         run: |
+          npx tsx src/features/reedyRiver/reedyRiver.regulatory.selftest.ts
+          npx tsx src/features/reedyRiver/reedyRiver.capture.selftest.ts
           npx tsx src/features/reedyRiver/reedyRiver.analysis.selftest.ts
           npx tsx src/features/reedyRiver/reedyRiver.workflow.selftest.ts
           npx tsx src/features/reedyRiver/reedyRiver.ingest.selftest.ts

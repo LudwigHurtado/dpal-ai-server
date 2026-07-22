@@ -1,0 +1,21 @@
+import assert from "node:assert/strict";
+import { REEDY_RIVER_TMDL_REFERENCE, findReedyRiverTmdlStation } from "./reedyRiver.regulatory.js";
+
+const reference = REEDY_RIVER_TMDL_REFERENCE;
+assert.equal(reference.dataClass, "regulatory_reference");
+assert.equal(reference.currentComplianceStatus, "not_computed");
+assert.equal(reference.monitoringEntries.length, 19);
+assert.equal(reference.calculationPoints.length, 4);
+assert.deepEqual(reference.monitoringEntries.map((entry) => entry.order), Array.from({ length: 19 }, (_, i) => i + 1));
+assert.deepEqual(reference.calculationPoints.map((point) => point.overallPercentReduction), [84, 81, 85, 23]);
+assert.equal(reference.waterQualityStandard.geometricMean.value, 126);
+assert.equal(reference.waterQualityStandard.singleSample.value, 349);
+assert.equal(findReedyRiverTmdlStation("RS-20501")?.entryId, "RS-19501/RS-20501");
+assert.equal(findReedyRiverTmdlStation("S-863")?.entryId, "RS-17381/S-863");
+assert.equal(findReedyRiverTmdlStation("not-a-station"), undefined);
+const serialized = JSON.stringify(reference).toLowerCase();
+assert.equal(serialized.includes("latitude"), false);
+assert.equal(serialized.includes("longitude"), false);
+assert.equal(serialized.includes("approx"), false);
+assert.equal(serialized.includes("currentcompliancestatus\":\"not_computed"), true);
+console.log("✅ reedyRiver.regulatory.selftest passed");

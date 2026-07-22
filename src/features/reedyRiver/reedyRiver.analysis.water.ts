@@ -3,25 +3,24 @@ import type {
   ReedyRiverFinding,
   ReedyRiverObservation,
   ReedyRiverProjectRecommendation,
-  ReedyRiverSeverity,
-  ReedyRiverSourceStatus,
 } from "./reedyRiver.types.js";
 import {
-  SEVERITY_RANK,
   actionFingerprint,
-  clamp,
-  distinctEvidenceObservers,
-  evidenceCount,
   findingId,
-  highestSeverity,
   numeric,
   recommendationId,
   safeDate,
-  taxonKey,
-  taxonLabel,
   text,
   unique,
 } from "./reedyRiver.analysis.shared.js";
+
+function isWaterEvidence(observation: ReedyRiverObservation): boolean {
+  return (
+    ["water_quality_sensor", "hydrology_public_api"].includes(observation.sourceType) ||
+    observation.kind === "citizen_field_screening" ||
+    observation.kind === "citizen_laboratory_result"
+  );
+}
 
 export function analyzeWater(
   observations: ReedyRiverObservation[],
@@ -31,9 +30,7 @@ export function analyzeWater(
   actions: ReedyRiverActionDraft[];
   recommendations: ReedyRiverProjectRecommendation[];
 } {
-  const rows = observations.filter((observation) =>
-    ["water_quality_sensor", "hydrology_public_api"].includes(observation.sourceType),
-  );
+  const rows = observations.filter(isWaterEvidence);
   const findings: ReedyRiverFinding[] = [];
   const actions: ReedyRiverActionDraft[] = [];
   const recommendations: ReedyRiverProjectRecommendation[] = [];
@@ -98,6 +95,51 @@ export function analyzeWater(
     });
   }
 
+  const citizenRows = rows.filter((row) => row.kind.startsWith("citizen_"));
+  if (citizenRows.length) {
+    const pending = citizenRows.filter((row) => row.reviewStatus === "qa_pending");
+    if (pending.length) {
+      const sites = unique(pending.map((row) => row.siteId));
+      const evidenceIds = pending.map((row) => row.observationId);
+      findings.push({
+        findingId: findingId("water", `citizen-qa:${sites.join(",")}`),
+        category: "water",
+        state: "candidate",
+        severity: "info",
+        title: "Authenticated citizen-science water records await QA",
+        summary: `${pending.length} server-hash-verified capture(s) were recorded. They remain QA-pending and are not regulatory compliance results.`,
+        confidence: 1,
+        siteIds: sites,
+        evidenceObservationIds: evidenceIds,
+        limitations: [
+          "Hash verification establishes record integrity, not measurement accuracy.",
+          "Regulatory use requires accepted methods, quality assurance, and applicable laboratory or authority requirements.",
+        ],
+      });
+      actions.push({
+        fingerprint: actionFingerprint("citizen_water_qa", "pending", sites),
+        category: "water",
+        priority: "moderate",
+        title: "Review authenticated citizen-science water captures",
+        rationale: "The capture payloads passed account and hash checks, but method, evidence, calibration, and laboratory claims still require review.",
+        steps: [
+          "Check station reference, timestamp, exact private location, and GPS accuracy.",
+          "Review method, units, evidence hashes, and any laboratory documentation.",
+          "Confirm whether the record is suitable for operational use, outside-data use, or rejection.",
+          "Record the review decision and limitations in the DPAL evidence history.",
+        ],
+        ownerRole: "Water-quality QA reviewer",
+        dueAt: new Date(windowEnd.getTime() + 24 * 60 * 60 * 1000).toISOString(),
+        evidenceObservationIds: evidenceIds,
+        dependsOn: [],
+        approvalRequired: true,
+        safeToExecute: true,
+        recommendedInitialStatus: "awaiting_expert",
+        nextStep: "Assign a qualified water-quality reviewer and inspect the original evidence package.",
+      });
+    }
+  }
+
   const flowRows = rows
     .filter((row) => text(row.data.parameterCode) === "00060")
     .map((row) => ({ row, value: numeric(row.data.value), date: safeDate(row.observedAt) }))
@@ -127,7 +169,7 @@ export function analyzeWater(
           siteIds: sites,
           evidenceObservationIds: evidenceIds,
           limitations: [
-            "Streamflow change alone does not identify pollution, habitat damage, or a causal source.",
+            "Streamflow change alone does not identify pollution, habitat damage, E. coli concentration, or a causal source.",
             "Field safety decisions should also consider weather, stage, local warnings, and site conditions.",
           ],
         });

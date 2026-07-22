@@ -86,7 +86,9 @@ export function analyzeReedyRiverWindow(input: AnalyzeReedyRiverInput): ReedyRiv
       observation.kind === "bioacoustic_detection",
   ).length;
   const waterMeasurements = observations.filter((observation) =>
-    ["water_quality_sensor", "hydrology_public_api"].includes(observation.sourceType),
+    ["water_quality_sensor", "hydrology_public_api"].includes(observation.sourceType) ||
+    observation.kind === "citizen_field_screening" ||
+    observation.kind === "citizen_laboratory_result",
   ).length;
   const fieldActivities = observations.filter(
     (observation) => observation.sourceType === "field_activity" || observation.kind === "field_activity",
@@ -109,7 +111,7 @@ export function analyzeReedyRiverWindow(input: AnalyzeReedyRiverInput): ReedyRiv
   const substantiveFindings = findings.filter((finding) => finding.category !== "data_gap");
   const deterministicSummary = observations.length === 0
     ? "No live observations were available in this three-hour window. DPAL generated monitoring-recovery actions only and made no ecological project recommendation."
-    : `${observations.length} live observation(s) from ${activeSites} site(s) produced ${substantiveFindings.length} evidence-based finding(s) and ${actionDrafts.length} workflow action(s). ${expertConfirmedRecords} record(s) are expert-confirmed; machine candidates remain pending review.`;
+    : `${observations.length} live observation(s) from ${activeSites} site(s) produced ${substantiveFindings.length} evidence-based finding(s) and ${actionDrafts.length} workflow action(s). ${expertConfirmedRecords} record(s) are expert-confirmed; machine and QA candidates remain pending review.`;
 
   return {
     projectId: REEDY_RIVER_PROJECT_ID,
@@ -135,9 +137,11 @@ export function analyzeReedyRiverWindow(input: AnalyzeReedyRiverInput): ReedyRiv
     deterministicSummary,
     caveats: [
       "DPAL separates machine candidates, field observations, QA-passed records, and expert-confirmed evidence.",
+      "Server hash verification establishes record integrity, not measurement accuracy, regulatory acceptance, or chain anchoring.",
+      "USGS discharge and gage height are hydrology context; they do not measure E. coli or current compliance.",
       "AI narrative cannot add findings, species confirmations, threshold exceedances, or projects that are absent from the deterministic evidence tables.",
       "Exact coordinates and restricted evidence links are not included in public report responses.",
-      "Operational recommendations require the approvals stated on each action and do not replace regulatory, landowner, safety, or professional requirements.",
+      "Operational recommendations require the approvals stated on each action and do not replace regulatory, landowner, safety, QAPP, laboratory, or professional requirements.",
     ],
   };
 }
