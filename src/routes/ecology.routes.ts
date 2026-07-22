@@ -1,7 +1,11 @@
 import { Router, type Request, type Response } from "express";
 import { landsatEcologyAdapter } from "../services/adapters/landsatEcology.adapter.js";
+import reedyRiverRoutes from "./reedyRiver.routes.js";
 
 const router = Router();
+
+// Production Reedy River live monitoring, university ingest, reports, and action workflows.
+router.use("/reedy-river", reedyRiverRoutes);
 
 // GET /api/ecology/landsat-scan?lat=&lng=&radiusKm=
 router.get("/landsat-scan", async (req: Request, res: Response) => {

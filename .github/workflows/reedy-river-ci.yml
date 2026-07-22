@@ -1,0 +1,41 @@
+name: Reedy River live operations CI
+
+on:
+  pull_request:
+    paths:
+      - "src/features/reedyRiver/**"
+      - "src/models/ReedyRiver*.ts"
+      - "src/services/reedyRiver.service.ts"
+      - "src/routes/reedyRiver.routes.ts"
+      - "src/routes/ecology.routes.ts"
+      - "docs/REEDY_RIVER_LIVE_OPERATIONS.md"
+      - ".github/workflows/reedy-river-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/features/reedyRiver/**"
+      - "src/models/ReedyRiver*.ts"
+      - "src/services/reedyRiver.service.ts"
+      - "src/routes/reedyRiver.routes.ts"
+      - "src/routes/ecology.routes.ts"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run type-check
+      - name: Reedy River evidence and integration self-tests
+        run: |
+          npx tsx src/features/reedyRiver/reedyRiver.analysis.selftest.ts
+          npx tsx src/features/reedyRiver/reedyRiver.workflow.selftest.ts
+          npx tsx src/features/reedyRiver/reedyRiver.ingest.selftest.ts
