@@ -75,10 +75,10 @@ const ReedyRiverObservationSchema = new Schema<IReedyRiverObservation>(
     confidence: { type: Number, min: 0, max: 1 },
     taxon: { type: Schema.Types.Mixed },
     data: { type: Schema.Types.Mixed, required: true, default: {} },
-    evidence: { type: [Schema.Types.Mixed], required: true, default: [] },
+    evidence: { type: [Schema.Types.Mixed] as any, required: true, default: [] },
     location: { type: Schema.Types.Mixed, required: true },
     provenance: { type: Schema.Types.Mixed, required: true },
-    reviewHistory: { type: [Schema.Types.Mixed], required: true, default: [] },
+    reviewHistory: { type: [Schema.Types.Mixed] as any, required: true, default: [] },
   },
   { timestamps: true, minimize: false },
 );
