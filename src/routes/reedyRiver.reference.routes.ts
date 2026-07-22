@@ -2,8 +2,10 @@ import { Router, type Request, type Response } from "express";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
 import { isDbConnected } from "../config/db.js";
-import { authMiddleware, type AuthedRequest } from "../middleware/auth.js";
-import { User } from "../models/User.js";
+import {
+  requireActiveReedyRiverAccount,
+  type ReedyRiverAccountRequest,
+} from "../middleware/reedyRiverAccountGate.js";
 import { ReedyRiverObservationModel } from "../models/ReedyRiverObservation.js";
 import { REEDY_RIVER_TMDL_REFERENCE } from "../features/reedyRiver/reedyRiver.regulatory.js";
 import { REEDY_RIVER_PROJECT_ID } from "../features/reedyRiver/reedyRiver.types.js";
@@ -94,7 +96,7 @@ router.get("/captures", async (req: Request, res: Response) => {
   }
 });
 
-router.post("/captures", captureLimiter, authMiddleware, async (req: AuthedRequest, res: Response) => {
+router.post("/captures", captureLimiter, requireActiveReedyRiverAccount(), async (req: ReedyRiverAccountRequest, res: Response) => {
   noStore(res);
   const parsed = captureSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -104,18 +106,9 @@ router.post("/captures", captureLimiter, authMiddleware, async (req: AuthedReque
     return res.status(503).json({ ok: false, error: "database_unavailable", message: "The live evidence store is unavailable; the capture was not recorded." });
   }
   try {
-    const account = await User.findById(String(req.auth?.sub || "")).select("status emailVerified role").lean();
-    if (!account) return res.status(401).json({ ok: false, error: "account_not_found" });
-    if (account.status !== "active") {
-      return res.status(403).json({ ok: false, error: "account_not_active", message: "Citizen-science capture requires an active DPAL account." });
-    }
-    if (!account.emailVerified) {
-      return res.status(403).json({ ok: false, error: "email_verification_required", message: "Verify the DPAL account before submitting field evidence." });
-    }
-
     const built = buildReedyRiverCitizenObservation({
       payload: parsed.data as ReedyRiverCitizenCapturePayload,
-      account: { userId: String(req.auth?.sub), role: String(account.role || req.auth?.role || "standard") },
+      account: { userId: String(req.reedyAccount?.userId), role: String(req.reedyAccount?.role || "standard") },
     });
     const result = await ingestReedyRiverObservations([built.observation]);
     return res.status(result.inserted > 0 ? 201 : 200).json({
@@ -131,7 +124,7 @@ router.post("/captures", captureLimiter, authMiddleware, async (req: AuthedReque
       verified: false,
       certified: false,
       recordedAt: new Date().toISOString(),
-      accountGate: "active_verified_account",
+      accountGate: "active_verified_account_and_session",
       regulatoryUse: "not_regulatory_until_method_and_qa_acceptance",
       message: "The live capture was recorded with a server-verified hash. It is not anchored, verified, certified, or a compliance result.",
     });

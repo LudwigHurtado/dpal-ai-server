@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import { landsatEcologyAdapter } from "../services/adapters/landsatEcology.adapter.js";
+import { reedyRiverSensitiveAccountGate } from "../middleware/reedyRiverAccountGate.js";
 import reedyRiverReferenceRoutes from "./reedyRiver.reference.routes.js";
 import reedyRiverRoutes from "./reedyRiver.routes.js";
 
@@ -8,6 +9,10 @@ const router = Router();
 // Regulatory reference and authenticated citizen-science capture. Mounted first so
 // these narrowly scoped routes remain separate from source-key ingest operations.
 router.use("/reedy-river", reedyRiverReferenceRoutes);
+
+// Revalidate the user and refresh-session state before any operator-only river action.
+// This closes the access-token window after logout, session revocation, or account suspension.
+router.use("/reedy-river", reedyRiverSensitiveAccountGate);
 
 // Production Reedy River live monitoring, university ingest, reports, and action workflows.
 router.use("/reedy-river", reedyRiverRoutes);

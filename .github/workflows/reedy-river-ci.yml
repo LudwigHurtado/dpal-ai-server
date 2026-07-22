@@ -9,6 +9,7 @@ on:
       - "src/services/reedyRiver.service.*.ts"
       - "src/routes/reedyRiver*.routes.ts"
       - "src/routes/ecology.routes.ts"
+      - "src/middleware/reedyRiverAccountGate.ts"
       - "docs/REEDY_RIVER*.md"
       - ".github/workflows/reedy-river-ci.yml"
   push:
@@ -20,6 +21,7 @@ on:
       - "src/services/reedyRiver.service.*.ts"
       - "src/routes/reedyRiver*.routes.ts"
       - "src/routes/ecology.routes.ts"
+      - "src/middleware/reedyRiverAccountGate.ts"
       - "docs/REEDY_RIVER*.md"
 
 permissions:

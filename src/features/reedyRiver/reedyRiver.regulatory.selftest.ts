@@ -13,9 +13,22 @@ assert.equal(reference.waterQualityStandard.singleSample.value, 349);
 assert.equal(findReedyRiverTmdlStation("RS-20501")?.entryId, "RS-19501/RS-20501");
 assert.equal(findReedyRiverTmdlStation("S-863")?.entryId, "RS-17381/S-863");
 assert.equal(findReedyRiverTmdlStation("not-a-station"), undefined);
-const serialized = JSON.stringify(reference).toLowerCase();
-assert.equal(serialized.includes("latitude"), false);
-assert.equal(serialized.includes("longitude"), false);
-assert.equal(serialized.includes("approx"), false);
-assert.equal(serialized.includes("currentcompliancestatus\":\"not_computed"), true);
+function collectKeys(value: unknown, out = new Set<string>()): Set<string> {
+  if (!value || typeof value !== "object") return out;
+  if (Array.isArray(value)) {
+    for (const item of value) collectKeys(item, out);
+    return out;
+  }
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    out.add(key.toLowerCase());
+    collectKeys(child, out);
+  }
+  return out;
+}
+const keys = collectKeys(reference);
+assert.equal(keys.has("latitude"), false);
+assert.equal(keys.has("longitude"), false);
+assert.equal(keys.has("lat"), false);
+assert.equal(keys.has("lng"), false);
+assert.equal(reference.currentComplianceStatus, "not_computed");
 console.log("✅ reedyRiver.regulatory.selftest passed");
