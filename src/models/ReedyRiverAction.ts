@@ -69,7 +69,7 @@ const ReedyRiverActionSchema = new Schema<IReedyRiverAction>(
     status: { type: String, enum: ACTION_STATUSES, required: true, index: true },
     nextStep: { type: String, required: true },
     sourceReportIds: { type: [String], required: true, default: [] },
-    history: { type: [Schema.Types.Mixed], required: true, default: [] },
+    history: { type: [Schema.Types.Mixed] as any, required: true, default: [] },
     resolutionNote: { type: String },
   },
   { timestamps: true, minimize: false },
