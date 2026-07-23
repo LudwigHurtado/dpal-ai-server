@@ -71,6 +71,7 @@ export function analyzeWater(
         "Check sensor calibration, units, timestamp, and quality flags.",
         "Collect a confirmation sample using the approved field protocol.",
         "Compare upstream/downstream or reference-site conditions when available.",
+        "Obtain explicit execution approval for the current investigation plan.",
         "Escalate to the responsible water-quality lead if the result is confirmed.",
       ],
       ownerRole: "Water-quality lead",
@@ -79,8 +80,9 @@ export function analyzeWater(
       dependsOn: [],
       approvalRequired: true,
       safeToExecute: true,
+      completionGate: "none",
       recommendedInitialStatus: "triaged",
-      nextStep: "Assign a water-quality lead and schedule confirmation sampling.",
+      nextStep: "Assign a water-quality lead, verify the evidence, and obtain execution approval before dispatch.",
     });
     recommendations.push({
       recommendationId: recommendationId("water", `${parameters.join(",")}:${sites.join(",")}`),
@@ -125,15 +127,16 @@ export function analyzeWater(
         steps: [
           "Check station reference, timestamp, exact private location, and GPS accuracy.",
           "Review method, units, evidence hashes, and any laboratory documentation.",
-          "Confirm whether the record is suitable for operational use, outside-data use, or rejection.",
+          "Confirm whether each record is suitable for operational use, outside-data use, or rejection.",
           "Record the review decision and limitations in the DPAL evidence history.",
         ],
         ownerRole: "Water-quality QA reviewer",
         dueAt: new Date(windowEnd.getTime() + 24 * 60 * 60 * 1000).toISOString(),
         evidenceObservationIds: evidenceIds,
         dependsOn: [],
-        approvalRequired: true,
+        approvalRequired: false,
         safeToExecute: true,
+        completionGate: "evidence_review_resolved",
         recommendedInitialStatus: "awaiting_expert",
         nextStep: "Assign a qualified water-quality reviewer and inspect the original evidence package.",
       });
@@ -190,6 +193,7 @@ export function analyzeWater(
           dependsOn: [],
           approvalRequired: false,
           safeToExecute: true,
+          completionGate: "none",
           recommendedInitialStatus: "triaged",
           nextStep: "Confirm field safety and annotate flow conditions before the next visit.",
         });

@@ -4,22 +4,14 @@ import type {
   ReedyRiverObservation,
   ReedyRiverProjectRecommendation,
   ReedyRiverSeverity,
-  ReedyRiverSourceStatus,
 } from "./reedyRiver.types.js";
 import {
-  SEVERITY_RANK,
   actionFingerprint,
   clamp,
-  distinctEvidenceObservers,
-  evidenceCount,
   findingId,
-  highestSeverity,
-  numeric,
   recommendationId,
-  safeDate,
   taxonKey,
   taxonLabel,
-  text,
   unique,
 } from "./reedyRiver.analysis.shared.js";
 
@@ -101,13 +93,14 @@ export function analyzeBioacoustics(
           ? `Plan repeat survey for ${label}`
           : `Review representative audio clips for ${label}`,
       rationale: expertRows.length
-        ? "Repeat sampling can test persistence and seasonal pattern without overstating a single confirmed clip."
+        ? "Repeat sampling can test persistence and seasonal pattern without overstating a single confirmed clip. The survey plan requires explicit execution approval."
         : "Human review of original audio is required before DPAL treats a detector label as ecological evidence.",
       steps: expertRows.length
         ? [
             "Select repeat recording periods that match the original detection window.",
             "Keep sensor placement, gain, model version, and weather metadata comparable.",
             "Have a qualified reviewer assess representative clips.",
+            "Obtain explicit execution approval for the current repeat-survey design.",
             "Compare detections across sites and dates before proposing habitat work.",
           ]
         : [
@@ -120,11 +113,12 @@ export function analyzeBioacoustics(
       dueAt: new Date(windowEnd.getTime() + (expertRows.length ? 72 : 48) * 60 * 60 * 1000).toISOString(),
       evidenceObservationIds: evidenceIds,
       dependsOn: [],
-      approvalRequired: true,
+      approvalRequired: expertRows.length > 0,
       safeToExecute: true,
+      completionGate: expertRows.length ? "none" : "expert_confirmation_or_rejection",
       recommendedInitialStatus: expertRows.length ? "triaged" : "awaiting_expert",
       nextStep: expertRows.length
-        ? "Assign a field ecology lead and schedule repeat sampling."
+        ? "Assign a field ecology lead, finalize the repeat-survey design, and obtain execution approval."
         : "Open the audio-review queue and assign a qualified reviewer.",
     });
 

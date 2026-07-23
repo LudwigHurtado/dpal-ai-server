@@ -2,6 +2,8 @@ import mongoose, { Schema, type Document } from "mongoose";
 import type {
   ReedyRiverActionHistoryEntry,
   ReedyRiverActionStatus,
+  ReedyRiverCompletionGate,
+  ReedyRiverExecutionApprovalStatus,
   ReedyRiverFinding,
   ReedyRiverSeverity,
 } from "../features/reedyRiver/reedyRiver.types.js";
@@ -23,6 +25,13 @@ export interface IReedyRiverAction extends Document {
   dependsOn: string[];
   approvalRequired: boolean;
   safeToExecute: boolean;
+  completionGate: ReedyRiverCompletionGate;
+  executionApprovalStatus: ReedyRiverExecutionApprovalStatus;
+  executionApprovalBasisHash?: string;
+  executionApprovedAt?: Date;
+  executionApprovedBy?: string;
+  executionApprovedByLabel?: string;
+  executionApprovalNote?: string;
   status: ReedyRiverActionStatus;
   nextStep: string;
   sourceReportIds: string[];
@@ -41,6 +50,20 @@ const ACTION_STATUSES: ReedyRiverActionStatus[] = [
   "blocked",
   "completed",
   "dismissed",
+];
+
+const EXECUTION_APPROVAL_STATUSES: ReedyRiverExecutionApprovalStatus[] = [
+  "not_required",
+  "pending",
+  "approved",
+  "rejected",
+  "invalidated",
+];
+
+const COMPLETION_GATES: ReedyRiverCompletionGate[] = [
+  "none",
+  "evidence_review_resolved",
+  "expert_confirmation_or_rejection",
 ];
 
 const ReedyRiverActionSchema = new Schema<IReedyRiverAction>(
@@ -66,6 +89,19 @@ const ReedyRiverActionSchema = new Schema<IReedyRiverAction>(
     dependsOn: { type: [String], required: true, default: [] },
     approvalRequired: { type: Boolean, required: true, default: false },
     safeToExecute: { type: Boolean, required: true, default: false },
+    completionGate: { type: String, enum: COMPLETION_GATES, required: true, default: "none" },
+    executionApprovalStatus: {
+      type: String,
+      enum: EXECUTION_APPROVAL_STATUSES,
+      required: true,
+      default: "not_required",
+      index: true,
+    },
+    executionApprovalBasisHash: { type: String },
+    executionApprovedAt: { type: Date },
+    executionApprovedBy: { type: String },
+    executionApprovedByLabel: { type: String },
+    executionApprovalNote: { type: String },
     status: { type: String, enum: ACTION_STATUSES, required: true, index: true },
     nextStep: { type: String, required: true },
     sourceReportIds: { type: [String], required: true, default: [] },

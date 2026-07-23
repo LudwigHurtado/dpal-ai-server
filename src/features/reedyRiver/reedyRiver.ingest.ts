@@ -8,6 +8,11 @@ import {
 import { assertLiveOnlyPayload } from "./reedyRiver.security.js";
 
 const FUTURE_CLOCK_SKEW_MS = 10 * 60 * 1000;
+const INGEST_INITIAL_REVIEW_STATUSES: ReedyRiverReviewStatus[] = [
+  "machine_candidate",
+  "field_observed",
+  "qa_pending",
+];
 
 function hash(value: string): string {
   return crypto.createHash("sha256").update(value, "utf8").digest("hex");
@@ -61,19 +66,14 @@ function normalizeSourceType(value: unknown): ReedyRiverSourceType {
   throw new Error("sourceType is not supported");
 }
 
-function normalizeReviewStatus(value: unknown): ReedyRiverReviewStatus {
-  const allowed: ReedyRiverReviewStatus[] = [
-    "machine_candidate",
-    "field_observed",
-    "qa_pending",
-    "qa_passed",
-    "expert_confirmed",
-    "rejected",
-  ];
-  if (typeof value === "string" && allowed.includes(value as ReedyRiverReviewStatus)) {
+function normalizeInitialReviewStatus(value: unknown): ReedyRiverReviewStatus {
+  if (typeof value === "string" && INGEST_INITIAL_REVIEW_STATUSES.includes(value as ReedyRiverReviewStatus)) {
     return value as ReedyRiverReviewStatus;
   }
-  throw new Error("reviewStatus is not supported");
+  if (["qa_passed", "expert_confirmed", "rejected"].includes(String(value))) {
+    throw new Error("reviewStatus_requires_protected_review_endpoint");
+  }
+  throw new Error("reviewStatus is not a supported initial ingest state");
 }
 
 function normalizeEvidence(value: unknown): ReedyRiverObservationInput["evidence"] {
@@ -126,7 +126,7 @@ export function normalizeNativeReedyRiverObservation(
     siteId: nonEmpty(raw.siteId, "siteId", 200),
     observedAt: iso(raw.observedAt, "observedAt"),
     kind: nonEmpty(raw.kind, "kind", 200),
-    reviewStatus: normalizeReviewStatus(raw.reviewStatus),
+    reviewStatus: normalizeInitialReviewStatus(raw.reviewStatus),
     confidence,
     taxon: Object.keys(taxon).length
       ? {
@@ -343,7 +343,11 @@ export function mapSensorThingsBatch(
     const sourceType = sensorThingsSourceType(name, scalar);
     const iotId = row["@iot.id"];
     const idempotencyKey = `sensorthings:${String(iotId ?? hash(`${batch.sourceId}|${batch.siteId}|${observedAt}|${name}|${JSON.stringify(row.result)}`))}`;
-    const reviewStatus = row.reviewStatus || (sourceType === "bioacoustic_sensor" ? "machine_candidate" : "qa_pending");
+    const reviewStatus = row.reviewStatus
+      ? normalizeInitialReviewStatus(row.reviewStatus)
+      : sourceType === "bioacoustic_sensor"
+        ? "machine_candidate"
+        : "qa_pending";
 
     return normalizeNativeReedyRiverObservation(
       {

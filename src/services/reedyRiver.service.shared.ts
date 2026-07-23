@@ -3,6 +3,8 @@ import {
   REEDY_RIVER_PROJECT_ID,
   type ReedyRiverActionRecord,
   type ReedyRiverActionStatus,
+  type ReedyRiverCompletionGate,
+  type ReedyRiverExecutionApprovalStatus,
   type ReedyRiverObservation,
   type ReedyRiverReportRecord,
   type ReedyRiverReviewStatus,
@@ -151,6 +153,20 @@ export function mapReport(value: unknown, publicSafe = true): ReedyRiverReportRe
   };
 }
 
+function completionGate(value: unknown): ReedyRiverCompletionGate {
+  return ["evidence_review_resolved", "expert_confirmation_or_rejection"].includes(String(value))
+    ? (String(value) as ReedyRiverCompletionGate)
+    : "none";
+}
+
+function executionApprovalStatus(row: Record<string, any>): ReedyRiverExecutionApprovalStatus {
+  if (!Boolean(row.approvalRequired)) return "not_required";
+  const value = String(row.executionApprovalStatus || "pending");
+  return ["pending", "approved", "rejected", "invalidated"].includes(value)
+    ? (value as ReedyRiverExecutionApprovalStatus)
+    : "pending";
+}
+
 export function mapAction(value: unknown, publicSafe = true): ReedyRiverActionRecord {
   const row = asPlain(value);
   return {
@@ -172,6 +188,13 @@ export function mapAction(value: unknown, publicSafe = true): ReedyRiverActionRe
     dependsOn: Array.isArray(row.dependsOn) ? row.dependsOn.map(String) : [],
     approvalRequired: Boolean(row.approvalRequired),
     safeToExecute: Boolean(row.safeToExecute),
+    completionGate: completionGate(row.completionGate),
+    executionApprovalStatus: executionApprovalStatus(row),
+    executionApprovalBasisHash: publicSafe ? undefined : row.executionApprovalBasisHash ? String(row.executionApprovalBasisHash) : undefined,
+    executionApprovedAt: dateIso(row.executionApprovedAt),
+    executionApprovedBy: publicSafe ? undefined : row.executionApprovedBy ? String(row.executionApprovedBy) : undefined,
+    executionApprovedByLabel: publicSafe ? undefined : row.executionApprovedByLabel ? String(row.executionApprovedByLabel) : undefined,
+    executionApprovalNote: publicSafe ? undefined : row.executionApprovalNote ? String(row.executionApprovalNote) : undefined,
     recommendedInitialStatus: row.status,
     status: row.status,
     nextStep: String(row.nextStep || ""),

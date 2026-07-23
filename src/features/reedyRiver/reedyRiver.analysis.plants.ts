@@ -4,22 +4,16 @@ import type {
   ReedyRiverObservation,
   ReedyRiverProjectRecommendation,
   ReedyRiverSeverity,
-  ReedyRiverSourceStatus,
 } from "./reedyRiver.types.js";
 import {
-  SEVERITY_RANK,
   actionFingerprint,
   clamp,
   distinctEvidenceObservers,
   evidenceCount,
   findingId,
-  highestSeverity,
-  numeric,
   recommendationId,
-  safeDate,
   taxonKey,
   taxonLabel,
-  text,
   unique,
 } from "./reedyRiver.analysis.shared.js";
 
@@ -98,7 +92,7 @@ export function analyzeInvasivePlants(
         expertRows.length
           ? "An expert-confirmed record is present."
           : corroborated
-            ? "Independent field evidence supports containment planning, but treatment still requires expert approval."
+            ? "Independent field evidence supports verification and boundary work, but treatment still requires expert confirmation and execution approval."
             : "The evidence is a candidate only and cannot authorize treatment."
       }`,
       confidence,
@@ -107,7 +101,7 @@ export function analyzeInvasivePlants(
       taxon: representative.taxon,
       limitations:
         state === "expert_confirmed"
-          ? ["Treatment method and permitting remain separate operational decisions."]
+          ? ["Treatment method, land access, permitting, and execution approval remain separate operational decisions."]
           : [
               "Species identification is not expert-confirmed.",
               "Do not disturb or treat a suspected regulated plant before qualified review.",
@@ -125,7 +119,7 @@ export function analyzeInvasivePlants(
           : `Obtain botanical verification for ${label}`,
       rationale:
         state === "expert_confirmed"
-          ? "A confirmed record supports operational planning, but treatment must follow site approval, label requirements, and qualified supervision."
+          ? "An expert-confirmed record supports planning, but execution requires an explicit approval bound to the current action and evidence basis."
           : "DPAL will not convert a machine or field candidate into a removal project without qualified identification and mapped extent.",
       steps:
         state === "expert_confirmed"
@@ -133,24 +127,26 @@ export function analyzeInvasivePlants(
               "Confirm landowner/site authorization and any regulatory reporting duty.",
               "Map the infestation boundary and photograph fixed monitoring points.",
               "Select an approved control method with a qualified invasive-plant professional.",
+              "Obtain explicit DPAL execution approval for the current evidence and method basis.",
               "Record treatment, disposal, and follow-up monitoring evidence in DPAL.",
             ]
           : [
               "Assign a qualified botanist or trained invasive-species reviewer.",
               "Review photographs, diagnostic features, season, and location context.",
               "Return to the site for voucher-quality evidence when identification is uncertain.",
-              "Mark the record expert_confirmed or rejected before any treatment workflow begins.",
+              "Mark the record expert_confirmed or rejected before closing this review action.",
             ],
       ownerRole: state === "expert_confirmed" ? "Riparian restoration lead" : "Botanical reviewer",
       dueAt: new Date(windowEnd.getTime() + dueHours * 60 * 60 * 1000).toISOString(),
       evidenceObservationIds: evidenceIds,
       dependsOn: [],
-      approvalRequired: true,
-      safeToExecute: state === "expert_confirmed",
+      approvalRequired: state === "expert_confirmed",
+      safeToExecute: true,
+      completionGate: state === "expert_confirmed" ? "none" : "expert_confirmation_or_rejection",
       recommendedInitialStatus: state === "expert_confirmed" ? "triaged" : "awaiting_expert",
       nextStep:
         state === "expert_confirmed"
-          ? "Assign a restoration lead and secure site/treatment approval."
+          ? "Assign a restoration lead, secure site/method approval, and obtain explicit execution approval."
           : "Assign a botanical reviewer; do not remove or spray the plant yet.",
     });
 
@@ -164,7 +160,7 @@ export function analyzeInvasivePlants(
       evidenceGate: state,
       rationale:
         state === "expert_confirmed"
-          ? "The expert-confirmed record and live evidence make this location eligible for a scoped containment plan."
+          ? "The expert-confirmed record and live evidence make this location eligible for a scoped containment plan, not automatic execution."
           : state === "corroborated"
             ? "Independent observations justify a focused verification survey and boundary mapping, but not treatment."
             : "A candidate record supports only a verification visit.",
@@ -178,7 +174,7 @@ export function analyzeInvasivePlants(
             : "not_enough_evidence",
       nextDecision:
         state === "expert_confirmed"
-          ? "Approve scope, land access, method, and follow-up schedule."
+          ? "Approve scope, land access, method, safety, and follow-up schedule before execution."
           : "Complete botanical review and update the evidence state.",
     });
   }

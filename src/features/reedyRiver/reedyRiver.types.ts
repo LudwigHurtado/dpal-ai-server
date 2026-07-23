@@ -34,6 +34,18 @@ export type ReedyRiverActionStatus =
   | "completed"
   | "dismissed";
 
+export type ReedyRiverExecutionApprovalStatus =
+  | "not_required"
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "invalidated";
+
+export type ReedyRiverCompletionGate =
+  | "none"
+  | "evidence_review_resolved"
+  | "expert_confirmation_or_rejection";
+
 export interface ReedyRiverTaxon {
   commonName?: string;
   scientificName?: string;
@@ -134,6 +146,7 @@ export interface ReedyRiverActionDraft {
   dependsOn: string[];
   approvalRequired: boolean;
   safeToExecute: boolean;
+  completionGate?: ReedyRiverCompletionGate;
   recommendedInitialStatus: ReedyRiverActionStatus;
   nextStep: string;
 }
@@ -204,8 +217,11 @@ export interface ReedyRiverActionHistoryEntry {
   at: string;
   actorId: string;
   actorLabel: string;
+  eventType?: "transition" | "execution_approval";
   fromStatus?: ReedyRiverActionStatus;
   toStatus: ReedyRiverActionStatus;
+  approvalDecision?: "approved" | "rejected" | "invalidated";
+  approvalBasisHash?: string;
   note?: string;
 }
 
@@ -215,6 +231,13 @@ export interface ReedyRiverActionRecord extends ReedyRiverActionDraft {
   status: ReedyRiverActionStatus;
   assignedTo?: string;
   assignedToLabel?: string;
+  completionGate: ReedyRiverCompletionGate;
+  executionApprovalStatus: ReedyRiverExecutionApprovalStatus;
+  executionApprovalBasisHash?: string;
+  executionApprovedAt?: string;
+  executionApprovedBy?: string;
+  executionApprovedByLabel?: string;
+  executionApprovalNote?: string;
   sourceReportIds: string[];
   history: ReedyRiverActionHistoryEntry[];
   resolutionNote?: string;

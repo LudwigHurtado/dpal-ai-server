@@ -50,6 +50,10 @@ assert.equal(
   "not_enough_evidence",
 );
 assert.equal(candidateReport.dataPolicy, "live_only");
+const candidateAction = candidateReport.actionDrafts.find((action) => action.category === "invasive_plant");
+assert.equal(candidateAction?.approvalRequired, false, "evidence review itself must not require field-execution approval");
+assert.equal(candidateAction?.safeToExecute, true, "botanical review steps are safe; treatment is not included");
+assert.equal(candidateAction?.completionGate, "expert_confirmation_or_rejection");
 
 const corroboratedReport = analyzeReedyRiverWindow({
   observations: [
@@ -65,8 +69,8 @@ assert.equal(
   "corroborated",
 );
 assert.equal(
-  corroboratedReport.actionDrafts.find((action) => action.category === "invasive_plant")?.safeToExecute,
-  false,
+  corroboratedReport.actionDrafts.find((action) => action.category === "invasive_plant")?.completionGate,
+  "expert_confirmation_or_rejection",
 );
 
 const confirmedReport = analyzeReedyRiverWindow({
@@ -87,6 +91,10 @@ assert.equal(
     ?.implementationStatus,
   "eligible_for_planning",
 );
+const confirmedAction = confirmedReport.actionDrafts.find((action) => action.category === "invasive_plant");
+assert.equal(confirmedAction?.approvalRequired, true);
+assert.equal(confirmedAction?.safeToExecute, true);
+assert.equal(confirmedAction?.completionGate, "none");
 
 const acousticReport = analyzeReedyRiverWindow({
   observations: [
@@ -110,6 +118,10 @@ assert.equal(
   acousticReport.findings.find((finding) => finding.category === "bioacoustic")?.state,
   "candidate",
   "high-confidence BirdNET output must remain a candidate",
+);
+assert.equal(
+  acousticReport.actionDrafts.find((action) => action.category === "bioacoustic")?.completionGate,
+  "expert_confirmation_or_rejection",
 );
 
 const noDataReport = analyzeReedyRiverWindow({

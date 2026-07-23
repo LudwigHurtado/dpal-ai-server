@@ -5,9 +5,9 @@ import {
   type ReedyRiverActionDraft,
   type ReedyRiverActionRecord,
   type ReedyRiverActionStatus,
+  type ReedyRiverCompletionGate,
   type ReedyRiverReportRecord,
   type ReedyRiverSeverity,
-  type ReedyRiverSourceType,
 } from "../features/reedyRiver/reedyRiver.types.js";
 import {
   alignToThreeHourWindow,
@@ -17,11 +17,16 @@ import {
 import {
   canTransitionReedyRiverAction,
   nextWorkflowInstruction,
+  reedyRiverActionApprovalBasisHash,
 } from "../features/reedyRiver/reedyRiver.workflow.js";
 import { ReedyRiverObservationModel } from "../models/ReedyRiverObservation.js";
 import { ReedyRiverReportModel } from "../models/ReedyRiverReport.js";
-import { ReedyRiverActionModel } from "../models/ReedyRiverAction.js";
+import { ReedyRiverActionModel, type IReedyRiverAction } from "../models/ReedyRiverAction.js";
 import { generateAiNarrative, unavailableSourceMessages } from "./reedyRiver.service.ai.js";
+import {
+  assertReedyRiverActionCompletionGate,
+  assertReedyRiverActionExecutionGate,
+} from "./reedyRiver.service.approval.js";
 import {
   SEVERITY_RANK,
   TERMINAL_ACTION_STATUSES,
@@ -35,6 +40,75 @@ import {
 
 export function higherPriority(left: ReedyRiverSeverity, right: ReedyRiverSeverity): ReedyRiverSeverity {
   return SEVERITY_RANK[left] >= SEVERITY_RANK[right] ? left : right;
+}
+
+function normalizedCompletionGate(value: ReedyRiverCompletionGate | undefined): ReedyRiverCompletionGate {
+  return value || "none";
+}
+
+function stricterCompletionGate(
+  left: ReedyRiverCompletionGate | undefined,
+  right: ReedyRiverCompletionGate | undefined,
+): ReedyRiverCompletionGate {
+  const rank: Record<ReedyRiverCompletionGate, number> = {
+    none: 0,
+    evidence_review_resolved: 1,
+    expert_confirmation_or_rejection: 2,
+  };
+  const a = normalizedCompletionGate(left);
+  const b = normalizedCompletionGate(right);
+  return rank[a] >= rank[b] ? a : b;
+}
+
+function approvalBasisHash(action: IReedyRiverAction): string {
+  return reedyRiverActionApprovalBasisHash({
+    category: action.category,
+    title: action.title,
+    rationale: action.rationale,
+    steps: action.steps,
+    ownerRole: action.ownerRole,
+    assignedTo: action.assignedTo,
+    assignedToLabel: action.assignedToLabel,
+    evidenceObservationIds: action.evidenceObservationIds,
+    dependsOn: action.dependsOn,
+    approvalRequired: action.approvalRequired,
+    safeToExecute: action.safeToExecute,
+    completionGate: action.completionGate,
+  });
+}
+
+function clearApprovalActor(action: IReedyRiverAction): void {
+  action.executionApprovedAt = undefined;
+  action.executionApprovedBy = undefined;
+  action.executionApprovedByLabel = undefined;
+}
+
+function invalidateExecutionApproval(
+  action: IReedyRiverAction,
+  actorId: string,
+  actorLabel: string,
+  note: string,
+  blockInProgress = true,
+): void {
+  if (!action.approvalRequired) return;
+  const previous = action.executionApprovalStatus || "pending";
+  if (!["approved", "rejected"].includes(previous)) return;
+  const fromStatus = action.status;
+  action.executionApprovalStatus = "invalidated";
+  action.executionApprovalBasisHash = undefined;
+  clearApprovalActor(action);
+  action.executionApprovalNote = note;
+  if (blockInProgress && action.status === "in_progress") action.status = "blocked";
+  action.history.push({
+    at: new Date().toISOString(),
+    actorId,
+    actorLabel,
+    eventType: "execution_approval",
+    fromStatus,
+    toStatus: action.status,
+    approvalDecision: "invalidated",
+    note,
+  });
 }
 
 export async function upsertReportActions(
@@ -54,11 +128,15 @@ export async function upsertReportActions(
     if (!existing) {
       const actionId = stableId("rra", `${REEDY_RIVER_PROJECT_ID}|${fingerprint}`);
       const status = draft.recommendedInitialStatus;
+      const completionGate = normalizedCompletionGate(draft.completionGate);
+      const executionApprovalStatus = draft.approvalRequired ? "pending" : "not_required";
       const nextStep = nextWorkflowInstruction({
         status,
         ownerRole: draft.ownerRole,
         safeToExecute: draft.safeToExecute,
         approvalRequired: draft.approvalRequired,
+        executionApprovalStatus,
+        completionGate,
       });
       const created = await ReedyRiverActionModel.create({
         actionId,
@@ -75,6 +153,8 @@ export async function upsertReportActions(
         dependsOn: draft.dependsOn,
         approvalRequired: draft.approvalRequired,
         safeToExecute: draft.safeToExecute,
+        completionGate,
+        executionApprovalStatus,
         status,
         nextStep: draft.nextStep || nextStep,
         sourceReportIds: [reportId],
@@ -83,6 +163,7 @@ export async function upsertReportActions(
             at: new Date().toISOString(),
             actorId: "reedy-river-scheduler",
             actorLabel: "DPAL Reedy River evidence engine",
+            eventType: "transition",
             toStatus: status,
             note: `Created from three-hour report ${reportId}.`,
           },
@@ -92,6 +173,8 @@ export async function upsertReportActions(
       continue;
     }
 
+    const priorApprovalStatus = existing.executionApprovalStatus || (existing.approvalRequired ? "pending" : "not_required");
+    const priorApprovalBasisHash = existing.executionApprovalBasisHash;
     existing.priority = higherPriority(existing.priority, draft.priority);
     existing.title = draft.title;
     existing.rationale = draft.rationale;
@@ -102,12 +185,39 @@ export async function upsertReportActions(
     existing.dependsOn = [...new Set([...existing.dependsOn, ...draft.dependsOn])];
     existing.approvalRequired = existing.approvalRequired || draft.approvalRequired;
     existing.safeToExecute = existing.safeToExecute && draft.safeToExecute;
+    existing.completionGate = stricterCompletionGate(existing.completionGate, draft.completionGate);
     existing.sourceReportIds = [...new Set([...existing.sourceReportIds, reportId])];
+
+    if (!existing.approvalRequired) {
+      existing.executionApprovalStatus = "not_required";
+      existing.executionApprovalBasisHash = undefined;
+      clearApprovalActor(existing);
+      existing.executionApprovalNote = undefined;
+    } else {
+      if (!existing.executionApprovalStatus || existing.executionApprovalStatus === "not_required") {
+        existing.executionApprovalStatus = "pending";
+      }
+      const currentBasisHash = approvalBasisHash(existing);
+      if (
+        ["approved", "rejected"].includes(priorApprovalStatus) &&
+        (!priorApprovalBasisHash || priorApprovalBasisHash !== currentBasisHash)
+      ) {
+        invalidateExecutionApproval(
+          existing,
+          "reedy-river-scheduler",
+          "DPAL Reedy River evidence engine",
+          `Execution approval invalidated because report ${reportId} changed the action, assignee, evidence, dependencies, safety, or completion basis.`,
+        );
+      }
+    }
+
     existing.nextStep = nextWorkflowInstruction({
       status: existing.status,
       ownerRole: existing.ownerRole,
       safeToExecute: existing.safeToExecute,
       approvalRequired: existing.approvalRequired,
+      executionApprovalStatus: existing.executionApprovalStatus,
+      completionGate: existing.completionGate,
       assignedToLabel: existing.assignedToLabel,
     });
     await existing.save();
@@ -245,21 +355,57 @@ export async function transitionReedyRiverAction(input: {
     throw new Error("terminal_status_requires_resolution_note");
   }
 
-  row.status = input.toStatus;
+  const previousApprovalStatus = row.executionApprovalStatus || (row.approvalRequired ? "pending" : "not_required");
+  const previousBasisHash = row.executionApprovalBasisHash;
   if (input.assignedTo) row.assignedTo = input.assignedTo;
   if (input.assignedToLabel) row.assignedToLabel = input.assignedToLabel;
+  if (
+    row.approvalRequired &&
+    ["approved", "rejected"].includes(previousApprovalStatus) &&
+    previousBasisHash !== approvalBasisHash(row)
+  ) {
+    invalidateExecutionApproval(
+      row,
+      input.actorId,
+      input.actorLabel,
+      "Execution approval invalidated because the action assignment or approval basis changed.",
+      false,
+    );
+  }
+
+  if (["in_progress"].includes(input.toStatus)) {
+    await assertReedyRiverActionExecutionGate(row);
+  }
+  if (input.toStatus === "completed") {
+    if (fromStatus === "in_progress") await assertReedyRiverActionExecutionGate(row);
+    await assertReedyRiverActionCompletionGate(row);
+  }
+  if (["blocked", "awaiting_expert"].includes(input.toStatus) && row.executionApprovalStatus === "approved") {
+    invalidateExecutionApproval(
+      row,
+      input.actorId,
+      input.actorLabel,
+      `Execution approval invalidated when the action moved to ${input.toStatus}.`,
+      false,
+    );
+  }
+
+  row.status = input.toStatus;
   if (TERMINAL_ACTION_STATUSES.has(input.toStatus)) row.resolutionNote = input.note;
   row.nextStep = nextWorkflowInstruction({
     status: input.toStatus,
     ownerRole: row.ownerRole,
     safeToExecute: row.safeToExecute,
     approvalRequired: row.approvalRequired,
+    executionApprovalStatus: row.executionApprovalStatus,
+    completionGate: row.completionGate,
     assignedToLabel: row.assignedToLabel,
   });
   row.history.push({
     at: new Date().toISOString(),
     actorId: input.actorId,
     actorLabel: input.actorLabel,
+    eventType: "transition",
     fromStatus,
     toStatus: input.toStatus,
     note: input.note,
