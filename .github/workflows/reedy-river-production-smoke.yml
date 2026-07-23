@@ -1,0 +1,92 @@
+name: Reedy River production API smoke
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/reedy-river-production-smoke.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/features/reedyRiver/**"
+      - "src/models/ReedyRiver*.ts"
+      - "src/services/reedyRiver.service.ts"
+      - "src/services/reedyRiver.service.*.ts"
+      - "src/routes/reedyRiver*.routes.ts"
+      - "src/routes/ecology.routes.ts"
+      - "src/middleware/reedyRiverAccountGate.ts"
+      - ".github/workflows/reedy-river-production-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      REEDY_RIVER_PRODUCTION_BASE_URL: ${{ vars.REEDY_RIVER_PRODUCTION_BASE_URL || 'https://web-production-a27b.up.railway.app' }}
+    steps:
+      - name: Verify deployed health, TMDL reference, and live-only overview
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="${REEDY_RIVER_PRODUCTION_BASE_URL%/}"
+          rm -f health.json tmdl.json overview.json
+          for attempt in $(seq 1 36); do
+            echo "Production smoke attempt ${attempt}/36 against ${base}"
+            if curl --fail --silent --show-error --max-time 20 "${base}/health" -o health.json \
+              && curl --fail --silent --show-error --max-time 20 "${base}/api/ecology/reedy-river/regulatory/tmdl" -o tmdl.json \
+              && curl --fail --silent --show-error --max-time 20 "${base}/api/ecology/reedy-river/overview" -o overview.json; then
+              if node <<'NODE'
+          const fs = require('node:fs');
+          const assert = require('node:assert/strict');
+          const health = JSON.parse(fs.readFileSync('health.json', 'utf8'));
+          const tmdl = JSON.parse(fs.readFileSync('tmdl.json', 'utf8'));
+          const overview = JSON.parse(fs.readFileSync('overview.json', 'utf8'));
+
+          assert.equal(health.ok, true, 'health.ok');
+          assert.equal(health.database?.connected, true, 'production MongoDB must be connected');
+
+          assert.equal(tmdl.ok, true, 'TMDL endpoint must respond ok');
+          assert.equal(tmdl.reference?.dataClass, 'regulatory_reference');
+          assert.equal(tmdl.reference?.currentComplianceStatus, 'not_computed');
+          assert.equal(tmdl.reference?.monitoringEntries?.length, 19);
+          assert.equal(tmdl.reference?.calculationPoints?.length, 4);
+          assert.deepEqual(
+            tmdl.reference.calculationPoints.map((point) => point.overallPercentReduction),
+            [84, 81, 85, 23],
+          );
+
+          assert.equal(overview.ok, true, 'overview.ok');
+          assert.equal(overview.projectId, 'reedy-river-sc');
+          assert.equal(overview.dataPolicy, 'live_only');
+          assert.equal(overview.databaseConnected, true);
+
+          function collectKeys(value, out = new Set()) {
+            if (!value || typeof value !== 'object') return out;
+            if (Array.isArray(value)) { for (const child of value) collectKeys(child, out); return out; }
+            for (const [key, child] of Object.entries(value)) { out.add(key.toLowerCase()); collectKeys(child, out); }
+            return out;
+          }
+          const referenceKeys = collectKeys(tmdl.reference);
+          for (const forbidden of ['latitude', 'longitude', 'lat', 'lng']) {
+            assert.equal(referenceKeys.has(forbidden), false, `regulatory reference must not publish ${forbidden}`);
+          }
+          const combined = JSON.stringify({ tmdl, overview }).toLowerCase();
+          for (const forbidden of ['"datamode":"demo"', '"mockonly":true', '"simulated":true', '"placeholder":true']) {
+            assert.equal(combined.includes(forbidden), false, `production response contains forbidden provenance: ${forbidden}`);
+          }
+          console.log('Production Reedy River API contract verified');
+          NODE
+              then
+                exit 0
+              fi
+            fi
+            sleep 10
+          done
+          echo "Production API did not satisfy the Reedy River contract after all retries" >&2
+          for file in health.json tmdl.json overview.json; do
+            if [[ -f "$file" ]]; then echo "--- $file"; head -c 4000 "$file"; echo; fi
+          done
+          exit 1
