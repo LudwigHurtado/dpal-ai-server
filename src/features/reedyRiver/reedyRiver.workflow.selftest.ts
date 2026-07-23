@@ -11,7 +11,9 @@ assert.equal(canTransitionReedyRiverAction("proposed", "triaged"), true);
 assert.equal(canTransitionReedyRiverAction("completed", "in_progress"), false);
 assert.equal(canTransitionReedyRiverAction("dismissed", "triaged"), false);
 assert.equal(REEDY_RIVER_ACTION_TRANSITIONS.awaiting_expert.includes("in_progress"), false);
+assert.equal(REEDY_RIVER_ACTION_TRANSITIONS.awaiting_expert.includes("completed"), false);
 assert.equal(REEDY_RIVER_ACTION_TRANSITIONS.blocked.includes("in_progress"), false);
+assert.equal(REEDY_RIVER_ACTION_TRANSITIONS.blocked.includes("completed"), false);
 assert.match(
   nextWorkflowInstruction({
     status: "assigned",
@@ -22,6 +24,16 @@ assert.match(
     assignedToLabel: "Restoration Team A",
   }),
   /explicit execution approval/i,
+);
+assert.match(
+  nextWorkflowInstruction({
+    status: "awaiting_expert",
+    ownerRole: "Botanical reviewer",
+    safeToExecute: true,
+    approvalRequired: false,
+    completionGate: "expert_confirmation_or_rejection",
+  }),
+  /return the action to triage/i,
 );
 
 const basis = {
