@@ -14,7 +14,7 @@ export const REEDY_RIVER_ACTION_TRANSITIONS: Record<
   triaged: ["assigned", "in_progress", "awaiting_expert", "blocked", "dismissed"],
   assigned: ["in_progress", "awaiting_expert", "blocked", "dismissed"],
   in_progress: ["awaiting_expert", "blocked", "completed", "dismissed"],
-  awaiting_expert: ["triaged", "assigned", "blocked", "completed", "dismissed"],
+  awaiting_expert: ["triaged", "assigned", "blocked", "dismissed"],
   blocked: ["triaged", "assigned", "awaiting_expert", "dismissed"],
   completed: [],
   dismissed: [],
@@ -122,8 +122,8 @@ export function nextWorkflowInstruction(input: {
         : "Finish the listed steps and attach close-out evidence.";
     case "awaiting_expert":
       return input.completionGate === "expert_confirmation_or_rejection"
-        ? "Assign a qualified reviewer, resolve the linked candidate as expert-confirmed or rejected, then close or supersede this review action."
-        : "Assign a qualified reviewer, record the decision and limitations, then close or return the action to triage.";
+        ? "Assign a qualified reviewer, resolve the linked candidate as expert-confirmed or rejected, then return the action to triage for the auditable close-out path."
+        : "Assign a qualified reviewer, record the decision and limitations, then return the action to triage or block it with a documented dependency.";
     case "blocked":
       return "Record the blocking dependency, assign its owner, and return the action to triage only when the dependency is cleared.";
     case "completed":
