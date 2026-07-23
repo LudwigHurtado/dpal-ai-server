@@ -1,7 +1,26 @@
 import { Router, type Request, type Response } from "express";
 import { landsatEcologyAdapter } from "../services/adapters/landsatEcology.adapter.js";
+import { reedyRiverSensitiveAccountGate } from "../middleware/reedyRiverAccountGate.js";
+import reedyRiverApprovalRoutes from "./reedyRiver.approval.routes.js";
+import reedyRiverReferenceRoutes from "./reedyRiver.reference.routes.js";
+import reedyRiverRoutes from "./reedyRiver.routes.js";
 
 const router = Router();
+
+// Regulatory reference and authenticated citizen-science capture. Mounted first so
+// these narrowly scoped routes remain separate from source-key ingest operations.
+router.use("/reedy-river", reedyRiverReferenceRoutes);
+
+// Explicit field-execution approval. This route performs active account/session
+// validation itself and restricts authorization to current admin/validator roles.
+router.use("/reedy-river", reedyRiverApprovalRoutes);
+
+// Revalidate the user and refresh-session state before any operator-only river action.
+// This closes the access-token window after logout, session revocation, or account suspension.
+router.use("/reedy-river", reedyRiverSensitiveAccountGate);
+
+// Production Reedy River live monitoring, university ingest, reports, and action workflows.
+router.use("/reedy-river", reedyRiverRoutes);
 
 // GET /api/ecology/landsat-scan?lat=&lng=&radiusKm=
 router.get("/landsat-scan", async (req: Request, res: Response) => {

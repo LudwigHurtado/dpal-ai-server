@@ -1,0 +1,63 @@
+name: Reedy River live operations CI
+
+on:
+  pull_request:
+    paths:
+      - "src/features/reedyRiver/**"
+      - "src/models/ReedyRiver*.ts"
+      - "src/services/reedyRiver.service.ts"
+      - "src/services/reedyRiver.service.*.ts"
+      - "src/routes/reedyRiver*.routes.ts"
+      - "src/routes/ecology.routes.ts"
+      - "src/middleware/reedyRiverAccountGate.ts"
+      - "docs/REEDY_RIVER*.md"
+      - ".github/workflows/reedy-river-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/features/reedyRiver/**"
+      - "src/models/ReedyRiver*.ts"
+      - "src/services/reedyRiver.service.ts"
+      - "src/services/reedyRiver.service.*.ts"
+      - "src/routes/reedyRiver*.routes.ts"
+      - "src/routes/ecology.routes.ts"
+      - "src/middleware/reedyRiverAccountGate.ts"
+      - "docs/REEDY_RIVER*.md"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Strict TypeScript diagnostics
+        shell: bash
+        run: |
+          set +e
+          npm run type-check > reedy-river-typecheck.log 2>&1
+          status=$?
+          cat reedy-river-typecheck.log
+          exit $status
+      - name: Upload TypeScript diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reedy-river-typecheck-${{ github.sha }}
+          path: reedy-river-typecheck.log
+          if-no-files-found: error
+          retention-days: 7
+      - name: Reedy River evidence, regulation, capture, and workflow self-tests
+        run: |
+          npx tsx src/features/reedyRiver/reedyRiver.regulatory.selftest.ts
+          npx tsx src/features/reedyRiver/reedyRiver.capture.selftest.ts
+          npx tsx src/features/reedyRiver/reedyRiver.analysis.selftest.ts
+          npx tsx src/features/reedyRiver/reedyRiver.workflow.selftest.ts
+          npx tsx src/features/reedyRiver/reedyRiver.ingest.selftest.ts
